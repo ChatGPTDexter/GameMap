@@ -9,6 +9,7 @@ public class MapGenerator : MonoBehaviour
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public GameObject housePrefab; // Assign your house prefab here
     public GameObject roadPrefab; // Assign your road prefab here
+    public Material roadMaterial; // Assign your desired road material here
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
 
@@ -108,17 +109,32 @@ public class MapGenerator : MonoBehaviour
             if (housePositions.TryGetValue(startNode, out Vector3 startPos) && housePositions.TryGetValue(endNode, out Vector3 endPos))
             {
                 Vector3 direction = (endPos - startPos).normalized;
+                float roadLength = roadPrefab.transform.localScale.z;
                 float distance = Vector3.Distance(startPos, endPos);
-                Quaternion rotation = Quaternion.LookRotation(direction);
 
-                // Instantiate road segments
-                int numSegments = Mathf.CeilToInt(distance / roadPrefab.transform.localScale.z);
+                // Adjust end positions to stop before reaching the house
+                Vector3 adjustedStartPos = startPos + direction * roadLength / 2;
+                Vector3 adjustedEndPos = endPos - direction * roadLength / 2;
+
+                distance = Vector3.Distance(adjustedStartPos, adjustedEndPos);
+                int numSegments = Mathf.CeilToInt(distance / roadLength);
+                Quaternion rotation = Quaternion.LookRotation(direction);
+                rotation *= Quaternion.Euler(270, 0, 0);
+
                 Debug.Log($"Creating road from {startNode} to {endNode}, Distance: {distance}, Segments: {numSegments}");
 
-                for (int i = 0; i < numSegments; i++)
+                for (int i = 0; i <= numSegments; i++)
                 {
-                    Vector3 segmentPos = Vector3.Lerp(startPos, endPos, (float)i / numSegments);
-                    Instantiate(roadPrefab, segmentPos, rotation);
+                    float t = (float)i / numSegments;
+                    Vector3 segmentPos = Vector3.Lerp(adjustedStartPos, adjustedEndPos, t);
+                    segmentPos.y = -5; // Set the y-coordinate to -5
+                    GameObject roadSegment = Instantiate(roadPrefab, segmentPos, rotation);
+                    roadSegment.transform.localScale = new Vector3(0.25f, 0.25f, roadSegment.transform.localScale.z); // Scale the road segment
+
+                    if (roadMaterial != null)
+                    {
+                        roadSegment.GetComponent<Renderer>().material = roadMaterial; // Change the material of the road
+                    }
                 }
             }
             else
