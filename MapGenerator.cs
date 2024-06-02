@@ -9,12 +9,19 @@ public class MapGenerator : MonoBehaviour
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public GameObject housePrefab; // Assign your house prefab here
     public GameObject roadPrefab; // Assign your road prefab here
-    public Material roadMaterial; // Assign your desired road material here
+    public Terrain terrain; // Assign the Terrain object here in the Inspector
+    public float elevationFactor = 0.01f; // Factor to control terrain elevation
+    public Material roadMaterial; // Assign the material for the roads here
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
+    private float[,] originalHeights; // Store original terrain heights
+    private float minX = float.MaxValue, maxX = float.MinValue;
+    private float minZ = float.MaxValue, maxZ = float.MinValue;
 
     void Start()
     {
+        Debug.Log("MapGenerator Start");
+
         if (houseCsvFile == null || mstCsvFile == null)
         {
             Debug.LogError("CSV files not assigned. Please assign CSV files in the Inspector.");
@@ -27,12 +34,68 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
+        if (terrain == null)
+        {
+            Debug.LogError("Terrain not assigned. Please assign Terrain in the Inspector.");
+            return;
+        }
+
+        originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
+        CalculateTerrainSize();
+        AdjustTerrainSize();
         GenerateMapFromCSV();
-        GenerateRoadsFromMST();
+    }
+
+    void CalculateTerrainSize()
+    {
+        StringReader reader = new StringReader(houseCsvFile.text);
+
+        // Skip the header row
+        string headerLine = reader.ReadLine();
+        if (headerLine == null)
+        {
+            Debug.LogError("House CSV file is empty.");
+            return;
+        }
+
+        while (reader.Peek() != -1)
+        {
+            string line = reader.ReadLine();
+            if (string.IsNullOrEmpty(line))
+            {
+                continue;
+            }
+
+            string[] fields = ParseCSVLine(line);
+
+            if (fields.Length < 4)
+            {
+                Debug.LogWarning($"Skipping invalid row: {line}");
+                continue;
+            }
+
+            if (float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (z < minZ) minZ = z;
+                if (z > maxZ) maxZ = z;
+            }
+        }
+    }
+
+    void AdjustTerrainSize()
+    {
+        TerrainData terrainData = terrain.terrainData;
+        terrainData.size = new Vector3(maxX - minX + 100, terrainData.size.y, maxZ - minZ + 100);
+        terrain.transform.position = new Vector3(minX - 50, 0, minZ - 50);
     }
 
     void GenerateMapFromCSV()
     {
+        Debug.Log("GenerateMapFromCSV");
+
         StringReader reader = new StringReader(houseCsvFile.text);
 
         // Skip the header row
@@ -65,18 +128,101 @@ public class MapGenerator : MonoBehaviour
                 float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
             {
                 Vector3 position = new Vector3(x, y, z);
-                Instantiate(housePrefab, position, Quaternion.identity);
                 housePositions[label] = position;
+                ElevateTerrainAround(position);
+                position.y = terrain.SampleHeight(position) + y;
+                Instantiate(housePrefab, position, Quaternion.identity);
             }
             else
             {
-                Debug.LogWarning($"Failed to parse coordinates: {line}");
+                Debug.LogWarning($"Failed to parse coordinates or view count: {line}");
             }
         }
+
+        GenerateRoadsFromMST();
+    }
+
+    void ElevateTerrainAround(Vector3 position)
+    {
+        Debug.Log($"Elevating terrain around position: {position}");
+
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        // Convert position to terrain coordinates
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+        // Define the area around the position to elevate
+        int radius = 30; // Adjust the radius as needed
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        Debug.Log($"Elevating terrain at range: ({startX},{startZ}) to ({endX},{endZ})");
+
+        // Get the current heights
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
+
+        // Calculate maximum elevation based on elevation factor
+        float maxElevation = Mathf.Min(50f, position.y * elevationFactor) / terrainData.size.y;
+        float maxIncr = 0;
+        float mindist = 300;
+        // Calculate falloff based on distance from the center
+        for (int x = 0; x < heights.GetLength(0); x++)
+        {
+            for (int z = 0; z < heights.GetLength(1); z++)
+            {
+                // Calculate distance from center of the area
+                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
+
+                // Calculate height increment based on maximum elevation and falloff
+                float heightIncrement = CalculateHeightIncrement(distance, maxElevation);
+
+                if (heightIncrement > maxIncr && distance < mindist)
+                {
+                    maxIncr = heightIncrement;
+                    mindist = distance;
+                }
+                else if (heightIncrement < maxIncr && distance < mindist)
+                {
+                    heightIncrement = maxIncr;
+                }
+
+                heights[x, z] += heightIncrement;
+
+            }
+        }
+
+        // Set the modified heights back to the terrain
+        terrainData.SetHeights(startX, startZ, heights);
+
+        Debug.Log("Terrain elevation applied");
+    }
+
+    float CalculateHeightIncrement(float distance, float maxElevation)
+    {
+        // Adjust the parameters as needed for your desired falloff curve
+        float maxDistance = 30f; // Radius
+        float plateauThreshold = 0.8f; // Threshold for plateau effect
+        float plateauStrength = 0.5f; // Strength of plateau effect
+        float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
+        float falloff = Mathf.Clamp01(1 - distance / maxDistance);
+        float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
+
+        // Calculate height increment with maximum limit at the center and plateau effect near the top
+        float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
+
+        return heightIncrement;
     }
 
     void GenerateRoadsFromMST()
     {
+        Debug.Log("GenerateRoadsFromMST");
+
         StringReader reader = new StringReader(mstCsvFile.text);
 
         // Skip the header row
@@ -97,50 +243,44 @@ public class MapGenerator : MonoBehaviour
 
             string[] fields = ParseCSVLine(line);
 
-            if (fields.Length < 3)
+            if (fields.Length < 2)
             {
                 Debug.LogWarning($"Skipping invalid row: {line}");
                 continue;
             }
 
-            string startNode = fields[1];
-            string endNode = fields[2];
+            string house1 = fields[0];
+            string house2 = fields[1];
 
-            if (housePositions.TryGetValue(startNode, out Vector3 startPos) && housePositions.TryGetValue(endNode, out Vector3 endPos))
+            if (housePositions.ContainsKey(house1) && housePositions.ContainsKey(house2))
             {
-                Vector3 direction = (endPos - startPos).normalized;
-                float roadLength = roadPrefab.transform.localScale.z;
-                float distance = Vector3.Distance(startPos, endPos);
-
-                // Adjust end positions to stop before reaching the house
-                Vector3 adjustedStartPos = startPos + direction * roadLength / 2;
-                Vector3 adjustedEndPos = endPos - direction * roadLength / 2;
-
-                distance = Vector3.Distance(adjustedStartPos, adjustedEndPos);
-                int numSegments = Mathf.CeilToInt(distance / roadLength);
-                Quaternion rotation = Quaternion.LookRotation(direction);
-                rotation *= Quaternion.Euler(270, 0, 0);
-
-                Debug.Log($"Creating road from {startNode} to {endNode}, Distance: {distance}, Segments: {numSegments}");
-
-                for (int i = 0; i <= numSegments; i++)
-                {
-                    float t = (float)i / numSegments;
-                    Vector3 segmentPos = Vector3.Lerp(adjustedStartPos, adjustedEndPos, t);
-                    segmentPos.y = -5; // Set the y-coordinate to -5
-                    GameObject roadSegment = Instantiate(roadPrefab, segmentPos, rotation);
-                    roadSegment.transform.localScale = new Vector3(0.25f, 0.25f, roadSegment.transform.localScale.z); // Scale the road segment
-
-                    if (roadMaterial != null)
-                    {
-                        roadSegment.GetComponent<Renderer>().material = roadMaterial; // Change the material of the road
-                    }
-                }
+                Vector3 position1 = housePositions[house1];
+                Vector3 position2 = housePositions[house2];
+                CreateRoadBetween(position1, position2);
             }
             else
             {
-                Debug.LogWarning($"Failed to find positions for nodes: {startNode}, {endNode}");
+                Debug.LogWarning($"House label not found for: {line}");
             }
+        }
+    }
+
+    void CreateRoadBetween(Vector3 position1, Vector3 position2)
+    {
+        Debug.Log($"Creating road between {position1} and {position2}");
+
+        Vector3 midPoint = (position1 + position2) / 2;
+        float roadLength = Vector3.Distance(position1, position2);
+        float roadWidth = 2f; // Adjust road width as needed
+
+        GameObject road = Instantiate(roadPrefab, midPoint, Quaternion.identity);
+
+        road.transform.localScale = new Vector3(roadWidth, 0.1f, roadLength);
+        road.transform.LookAt(position2);
+
+        if (roadMaterial != null)
+        {
+            road.GetComponent<Renderer>().material = roadMaterial;
         }
     }
 
