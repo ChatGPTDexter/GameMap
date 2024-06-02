@@ -1,0 +1,184 @@
+import csv
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import os
+import re
+
+
+def scrape_youtube_data():
+
+    counter = 0
+    for original_videos in video_links:
+
+        if counter <= 99:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#contents"))
+            )
+
+
+        if counter > 99:
+
+            new_main = driver.find_element(By.ID,"contents")
+            newVideoLinks = new_main.find_elements(By.CSS_SELECTOR, 'a.ytd-thumbnail')
+            # Scroll to the bottom of the playlist
+            driver.execute_script("arguments[0].scrollIntoView(true);", newVideoLinks[99])
+
+            WebDriverWait(driver, 10)
+            while True:
+                video_count = driver.execute_script("return document.querySelectorAll('ytd-playlist-video-renderer').length;")
+                if video_count > 100:
+                    break
+
+            if counter > 199:
+                new_main = driver.find_element(By.ID,"contents")
+                newVideoLinks = new_main.find_elements(By.CSS_SELECTOR, 'a.ytd-thumbnail')
+                driver.execute_script("arguments[0].scrollIntoView(true);", newVideoLinks[199])
+                WebDriverWait(driver, 10)
+                while True:
+                    video_count = driver.execute_script("return document.querySelectorAll('ytd-playlist-video-renderer').length;")
+                    if video_count > 200:
+                        break
+                if counter > 299:
+                    new_main = driver.find_element(By.ID,"contents")
+                    newVideoLinks = new_main.find_elements(By.CSS_SELECTOR, 'a.ytd-thumbnail')
+                    driver.execute_script("arguments[0].scrollIntoView(true);", newVideoLinks[299])
+                    WebDriverWait(driver, 10)
+                    while True:
+                        video_count = driver.execute_script("return document.querySelectorAll('ytd-playlist-video-renderer').length;")
+                        if video_count > 300:
+                            break
+                    if counter > 399:
+                        new_main = driver.find_element(By.ID,"contents")
+                        newVideoLinks = new_main.find_elements(By.CSS_SELECTOR, 'a.ytd-thumbnail')
+                        driver.execute_script("arguments[0].scrollIntoView(true);", newVideoLinks[399])
+                        WebDriverWait(driver, 10)
+                        while True:
+                            video_count = driver.execute_script("return document.querySelectorAll('ytd-playlist-video-renderer').length;")
+                            if video_count > 400:
+                                break
+                
+
+        new_main = driver.find_element(By.ID,"contents")
+        newVideoLinks = new_main.find_elements(By.XPATH, '//*[@id="video-title"]')
+        
+        video = newVideoLinks[counter]
+
+        video.click()
+
+        driver.implicitly_wait(5)
+
+        data = []
+        current_url = driver.current_url
+
+        # Wait for title element
+        title_element = driver.find_element(By.XPATH, '//*[@id="title"]/h1/yt-formatted-string')
+        title = title_element.text
+
+        # Wait for description elemen
+
+        description_html = driver.find_element(By.XPATH, '//*[@id="description"]')
+        
+        description_short = description_html.find_element(By.XPATH, '//*[@id="description-inner"]')
+        snippet = description_short.find_element(By.ID, "snippet")
+        video_player = driver.find_element(By.ID, 'player')
+        video_player.click()
+        snippet.click()
+    
+
+        try:
+
+            description_element = description_html.find_element(By.XPATH, '//*[@id="description-inline-expander"]/yt-attributed-string/span')
+            firstdescription = description_element.text
+
+        except Exception as e:
+
+            firstdescription = ''
+            
+        try:
+            popup = driver.find_element(By.XPATH, '//*[@id="mealbar-promo-renderer"]')
+            dismiss_button = popup.find_element(By.XPATH, '//*[@id="dismiss-button"]/yt-button-shape/button')
+            dismiss_button.click()
+        except:
+            print("No popup")
+
+        # Get the text content of title and description
+        title = title_element.text
+
+        relevance_un = description_short.find_element(By.XPATH, '//*[@id="info"]/span[1]').text
+        relevance = re.sub(r' views', '', relevance_un)
+
+        show_trancript = description_short.find_element(By.XPATH, '/html/body/ytd-app/div[1]/ytd-page-manager/ytd-watch-flexy/div[5]/div[1]/div/div[2]/ytd-watch-metadata/div/div[4]/div[1]/div/ytd-text-inline-expander/div[2]/ytd-structured-description-content-renderer/div/ytd-video-description-transcript-section-renderer/div[3]/div/ytd-button-renderer')
+        show_trancript.click()
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "content"))
+        )
+        transcript_container = driver.find_element(By.ID, 'content')
+        transcripts = transcript_container.find_elements(By.CSS_SELECTOR, "yt-formatted-string.segment-text")
+        transcript_string = ''
+        unique_transcript_array = []
+        counter3 = 0
+
+        
+
+        for transcript in transcripts:
+            print(transcript.text)
+            if transcript.text not in unique_transcript_array and transcript.text != "":
+                counter3 += 1
+                unique_transcript_array.append(transcript.text)
+                if counter3 == 1:
+                    transcript_string += transcript.text
+                else:
+                    transcript_string += " " + transcript.text
+            else:
+                continue
+
+        
+        
+
+        data.append({'Title': title, 'Description': remove_newlines(firstdescription), 'URL': current_url, 'Transcript': transcript_string, 'Relevance': relevance, 'date': 0, 'video-index': (counter + 1)})
+
+        write_to_csv(data)
+        
+        driver.get("https://www.youtube.com/playlist?list=PLp8P489qkBoZb_b4_FOgGGPWGxrVV6Al9")
+
+        counter += 1
+
+    driver.quit()
+    
+    # Append the video data to the list
+
+def write_to_csv(data):
+    # Specify the CSV file path
+    csv_file_path = 'chemistry2.txt'
+
+    # Write the data to the CSV file
+    with open(csv_file_path, 'a', newline='', encoding='utf-8') as csv_file:
+        fieldnames = ['Title', 'Description', 'URL', 'Transcript', 'Relevance', 'date', 'video-index']
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+        # Write the data rows
+        writer.writerows(data)
+def remove_newlines(text):
+    return text.replace("\n", " ")
+
+if __name__ == "__main__":
+    driver = webdriver.Chrome()  # Change this line based on your browser choice
+
+    # Navigate to YouTube homepage
+    driver.get("https://www.youtube.com/playlist?list=PLp8P489qkBoZb_b4_FOgGGPWGxrVV6Al9")
+
+
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "#contents"))
+    )
+
+    main = driver.find_element(By.ID,"contents")
+    # Find the first few video links on the homepage (you can adjust the range to get more videos)
+
+    video_links = main.find_elements(By.ID,"thumbnail")
+
+    scrape_youtube_data()
