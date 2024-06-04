@@ -17,9 +17,11 @@ public class MapGenerator : MonoBehaviour
     public Material roadMaterial; // Assign the material for the roads here
     public int numTrees = 100; // Number of trees to spawn
     public int numRocks = 50; // Number of rocks to spawn
+    public int numGrass = 50000;  
     public Texture2D textureToAdd; // The new texture layer to add
     public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
     public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
+    public List<GameObject> grassPrebs;
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
@@ -54,7 +56,7 @@ public class MapGenerator : MonoBehaviour
         originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
         GenerateMapFromCSV();
         AddTerrainLayer();
-        SpawnTreesAndRocks();
+        SpawnTreesAndRocksandGrass();
         
     }
 
@@ -120,6 +122,10 @@ public class MapGenerator : MonoBehaviour
             Debug.LogError("House CSV file is empty.");
             return;
         }
+
+        List<Vector3> housePositions = new List<Vector3>();
+        List<float> houseHeights = new List<float>();
+
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -142,15 +148,18 @@ public class MapGenerator : MonoBehaviour
                 float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
             {
                 Vector3 position = new Vector3(x, y, z);
-                housePositions[label] = position;
+                housePositions.Add(position);
+
                 try
                 {
                     // Adjust terrain and get the corrected height
                     ElevateTerrainAround(position);
                     float terrainHeight = terrain.SampleHeight(position);
+
                     // Instantiate the house prefab at the adjusted height
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
                     Instantiate(housePrefab, new Vector3(position.x, terrainHeight + 4, position.z), Quaternion.identity);
+                    houseHeights.Add(terrainHeight);
                 }
                 catch (Exception ex)
                 {
@@ -163,7 +172,61 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
+        // Ensure terrain around houses is not higher than the houses
+        for (int i = 0; i < housePositions.Count; i++)
+        {
+            Vector3 position = housePositions[i];
+            float houseHeight = houseHeights[i];
+            AdjustTerrainAroundHouse(position, houseHeight);
+        }
+
         GenerateRoadsFromMST();
+    }
+
+    void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        // Convert position to terrain coordinates
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        // Define the area around the position to check and adjust
+        int radius = 9; // Larger radius for smooth transition
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        // Get the current heights in the area
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
+
+        // Adjust terrain heights with smooth transition
+        for (int x = 0; x < heights.GetLength(0); x++)
+        {
+            for (int z = 0; z < heights.GetLength(1); z++)
+            {
+                float terrainHeight = heights[x, z] * terrainData.size.y + terrainPos.y;
+                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
+                float falloff = Mathf.Clamp01(1 - (distance / radius));
+
+                if (terrainHeight > houseHeight - 5)
+                {
+                    heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
+                }
+                else if (terrainHeight < houseHeight - 4)
+                {
+                    heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
+                }   
+            }
+        }
+
+        // Set the modified heights back to the terrain
+        terrainData.SetHeights(startX, startZ, heights);
     }
 
     void ElevateTerrainAround(Vector3 position)
@@ -221,7 +284,6 @@ public class MapGenerator : MonoBehaviour
         }
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
-
         Debug.Log("Terrain elevation applied");
     
     }
@@ -385,7 +447,7 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-    void SpawnTreesAndRocks()
+    void SpawnTreesAndRocksandGrass()
     {
         for (int i = 0; i < numTrees; i++)
         {
@@ -395,6 +457,11 @@ public class MapGenerator : MonoBehaviour
         for (int i = 0; i < numRocks; i++)
         {
             SpawnObject(rockPrefabs);
+        }
+
+        for (int i = 0; i < numRocks; i++)
+        {
+            SpawnObject(grassPrebs);
         }
     }
 
@@ -476,5 +543,33 @@ public class MapGenerator : MonoBehaviour
         }
 
         return fields.ToArray();
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.P))
+        {
+            RestoreOriginalTerrain();
+        }
+    }
+
+    void RestoreOriginalTerrain()
+    {
+        if (terrain == null || originalHeights == null)
+        {
+            Debug.LogError("Terrain or original heights not assigned.");
+            return;
+        }
+
+        // Restore the terrain to its original state
+        terrain.terrainData.SetHeights(0, 0, originalHeights);
+
+        // Remove the added texture layer
+        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
+        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
+        terrain.terrainData.terrainLayers = newLayersList.ToArray();
+        terrain.transform.position = new Vector3(0, 0, 0);
+        Debug.Log("Terrain restored to original state.");
     }
 }
