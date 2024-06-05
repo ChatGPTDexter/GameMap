@@ -17,6 +17,9 @@ public class MapGenerator : MonoBehaviour
     public Material roadMaterial; // Assign the material for the roads here
     public int numTrees = 100; // Number of trees to spawn
     public int numRocks = 50; // Number of rocks to spawn
+    public Texture2D textureToAdd; // The new texture layer to add
+    public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
+    public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
@@ -50,7 +53,9 @@ public class MapGenerator : MonoBehaviour
         AdjustTerrainSize();
         originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
         GenerateMapFromCSV();
+        AddTerrainLayer();
         SpawnTreesAndRocks();
+        
     }
 
     void CalculateTerrainSize()
@@ -101,6 +106,7 @@ public class MapGenerator : MonoBehaviour
         Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
+
     void GenerateMapFromCSV()
     {
         Debug.Log("GenerateMapFromCSV");
@@ -114,7 +120,6 @@ public class MapGenerator : MonoBehaviour
             Debug.LogError("House CSV file is empty.");
             return;
         }
-
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -140,26 +145,36 @@ public class MapGenerator : MonoBehaviour
                 housePositions[label] = position;
                 try
                 {
-                    AdjustTerrainHeightAtPosition(position, y);
+                    // Adjust terrain and get the corrected height
+                    ElevateTerrainAround(position);
+
+                    // Instantiate the house prefab
+                    GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+                    GameObject houseInstance = Instantiate(housePrefab, position, Quaternion.identity);
+
+                    // Get the bounds of the house prefab
+                    Bounds bounds = houseInstance.GetComponent<Renderer>().bounds;
+
+                    // Calculate the distance between the center and bottom of the house prefab
+                    float heightFromCenterToBottom = bounds.extents.y;
+
+                    // Adjust the position of the house instance to align the bottom with the coordinate
+                    houseInstance.transform.position = new Vector3(position.x, position.y - heightFromCenterToBottom, position.z);
                 }
                 catch (Exception ex)
                 {
                     Debug.LogError($"Error adjusting terrain at position {position}: {ex.Message}");
                 }
-                GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                Instantiate(housePrefab, position, Quaternion.identity);
-            }
-            else
-            {
-                Debug.LogWarning($"Failed to parse coordinates or view count: {line}");
             }
         }
 
         GenerateRoadsFromMST();
     }
 
-    void AdjustTerrainHeightAtPosition(Vector3 position, float houseHeight)
+    void ElevateTerrainAround(Vector3 position)
     {
+        Debug.Log($"Elevating terrain around position: {position}");
+
         TerrainData terrainData = terrain.terrainData;
         Vector3 terrainPos = terrain.transform.position;
 
@@ -169,43 +184,107 @@ public class MapGenerator : MonoBehaviour
         // Convert position to terrain coordinates
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+        // Define the area around the position to elevate
+        int radius = 30; // Adjust the radius as needed
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
 
-        int range = 20; // Increased range for wider hills
-        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - range, 0, xResolution - 1);
-        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - range, 0, zResolution - 1);
-        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + range, 0, xResolution - 1);
-        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + range, 0, zResolution - 1);
+        Debug.Log($"Elevating terrain at range: ({startX},{startZ}) to ({endX},{endZ})");
 
-        // Add debugging information
-        Debug.Log($"Adjusting terrain from ({startX}, {startZ}) to ({endX}, {endZ}) with relative position ({relativeX}, {relativeZ})");
+        // Get the current heights
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
-        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX + 1, endZ - startZ + 1);
-
-        float maxHeight = (houseHeight - 5f) / terrainData.size.y; // Limit the maximum height
-
-        for (int x = 0; x <= endX - startX; x++)
+        // Calculate maximum elevation based on elevation factor
+        float maxElevation = Mathf.Min(50f, position.y * elevationFactor) / terrainData.size.y;
+        float maxIncr = 0;
+        float mindist = 300;
+        // Calculate falloff based on distance from the center
+        for (int x = 0; x < heights.GetLength(0); x++)
         {
-            for (int z = 0; z <= endZ - startZ; z++)
+            for (int z = 0; z < heights.GetLength(1); z++)
             {
+                // Calculate distance from center of the area
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
-                float falloff = Mathf.Exp(-distance * distance / 500f); // Gradual falloff
-                float newHeight = heights[x, z] + falloff * (maxHeight - heights[x, z]); // Additive height adjustment
 
-                // Ensure newHeight is within bounds
-                if (newHeight < 0)
+                // Calculate height increment based on maximum elevation and falloff
+                float heightIncrement = CalculateHeightIncrement(distance, maxElevation);
+
+                if (heightIncrement > maxIncr && distance < mindist)
                 {
-                    newHeight = 0;
+                    maxIncr = heightIncrement;
+                    mindist = distance;
                 }
-                else if (newHeight > 1)
+                else if (heightIncrement < maxIncr && distance < mindist)
                 {
-                    newHeight = 1;
+                    heightIncrement = maxIncr;
                 }
 
-                heights[x, z] = newHeight;
+                heights[x, z] += heightIncrement;
+            }
+        }
+        // Set the modified heights back to the terrain
+        terrainData.SetHeights(startX, startZ, heights);
+
+        Debug.Log("Terrain elevation applied");
+    
+    }
+
+    void AddTerrainLayer()
+    {
+        if (terrain == null || textureToAdd == null)
+        {
+            Debug.LogError("Terrain or texture to add not assigned.");
+            return;
+        }
+
+        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+
+        // Check if the texture layer already exists
+        foreach (TerrainLayer layer in terrainLayers)
+        {
+            if (layer.diffuseTexture == textureToAdd)
+            {
+                Debug.LogWarning("Texture layer already exists on the terrain.");
+                return;
             }
         }
 
-        terrainData.SetHeights(startX, startZ, heights);
+        // Create a new terrain layer with the provided texture
+        TerrainLayer newLayer = new TerrainLayer
+        {
+            diffuseTexture = textureToAdd,
+            tileSize = textureTiling,
+            tileOffset = textureOffset
+        };
+
+        // Add the new layer to the list of terrain layers
+        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
+        newLayersList.Add(newLayer);
+
+        // Update the terrain's terrain layers
+        terrain.terrainData.terrainLayers = newLayersList.ToArray();
+
+        Debug.Log("Terrain layer added successfully.");
+    }
+
+    float CalculateHeightIncrement(float distance, float maxElevation)
+    {
+        // Adjust the parameters as needed for your desired falloff curve
+        float maxDistance = 30f; // Radius
+        float plateauThreshold = 0.8f; // Threshold for plateau effect
+        float plateauStrength = 0.5f; // Strength of plateau effect
+        float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
+        float falloff = Mathf.Clamp01(1 - distance / maxDistance);
+        float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
+
+        //
+
+        // Calculate height increment with maximum limit at the center and plateau effect near the top
+        float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
+
+        return heightIncrement;
     }
 
     void GenerateRoadsFromMST()
@@ -295,7 +374,7 @@ public class MapGenerator : MonoBehaviour
 
         road.transform.localScale = new Vector3(roadWidth, 0.1f, roadLength);
         road.transform.LookAt(position2);
-        road.transform.Rotate(270, 90, 0); // Rotate the road to be horizontal and properly aligned
+        road.transform.Rotate(270, 0, 0); // Rotate the road to be horizontal and properly aligned
 
         // Adjust the road height to match the terrain at the midpoint
         midPoint.y = terrain.SampleHeight(midPoint) + 0.1f; // Slightly above the terrain
@@ -348,6 +427,7 @@ public class MapGenerator : MonoBehaviour
             Instantiate(prefab, position, Quaternion.identity);
         }
     }
+
 
     bool IsValidSpawnPosition(Vector3 position)
     {
