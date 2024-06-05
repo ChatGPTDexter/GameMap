@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using System;
 using System.IO;
@@ -123,9 +124,6 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
-        List<Vector3> housePositions = new List<Vector3>();
-        List<float> houseHeights = new List<float>();
-
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -148,7 +146,7 @@ public class MapGenerator : MonoBehaviour
                 float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
             {
                 Vector3 position = new Vector3(x, y, z);
-                housePositions.Add(position);
+                housePositions[label] = position;
 
                 try
                 {
@@ -156,10 +154,9 @@ public class MapGenerator : MonoBehaviour
                     ElevateTerrainAround(position);
                     float terrainHeight = terrain.SampleHeight(position);
 
-                    // Instantiate the house prefab at the adjusted height
+                    // Instantiate the house prefab at the adjusted height with +4 offset
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                    Instantiate(housePrefab, new Vector3(position.x, terrainHeight + 4, position.z), Quaternion.identity);
-                    houseHeights.Add(terrainHeight);
+                    Instantiate(housePrefab, new Vector3(position.x, terrainHeight + 5, position.z), Quaternion.identity);
                 }
                 catch (Exception ex)
                 {
@@ -170,14 +167,6 @@ public class MapGenerator : MonoBehaviour
             {
                 Debug.LogWarning($"Failed to parse coordinates or view count: {line}");
             }
-        }
-
-        // Ensure terrain around houses is not higher than the houses
-        for (int i = 0; i < housePositions.Count; i++)
-        {
-            Vector3 position = housePositions[i];
-            float houseHeight = houseHeights[i];
-            AdjustTerrainAroundHouse(position, houseHeight);
         }
 
         GenerateRoadsFromMST();
@@ -431,7 +420,7 @@ public class MapGenerator : MonoBehaviour
 
         road.transform.localScale = new Vector3(roadWidth, 0.1f, roadLength);
         road.transform.LookAt(position2);
-        road.transform.Rotate(0, 0, 0); // Rotate the road to be horizontal and properly aligned
+        road.transform.Rotate(270, 0, 0); // Rotate the road to be horizontal and properly aligned
 
         // Adjust the road height to match the terrain at the midpoint
         midPoint.y = terrain.SampleHeight(midPoint) + 0.1f; // Slightly above the terrain
