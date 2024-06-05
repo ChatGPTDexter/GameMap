@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using System;
 using System.IO;
@@ -18,11 +17,12 @@ public class MapGenerator : MonoBehaviour
     public Material roadMaterial; // Assign the material for the roads here
     public int numTrees = 100; // Number of trees to spawn
     public int numRocks = 50; // Number of rocks to spawn
-    public int numGrass = 50000;  
+    public int numGrass = 50000;
     public Texture2D textureToAdd; // The new texture layer to add
     public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
     public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
     public List<GameObject> grassPrebs;
+    public GameObject waterPrefab; // Assign the water prefab here
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
@@ -58,7 +58,7 @@ public class MapGenerator : MonoBehaviour
         GenerateMapFromCSV();
         AddTerrainLayer();
         SpawnTreesAndRocksandGrass();
-        
+        GeneratePonds();
     }
 
     void CalculateTerrainSize()
@@ -109,7 +109,6 @@ public class MapGenerator : MonoBehaviour
         Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
-
     void GenerateMapFromCSV()
     {
         Debug.Log("GenerateMapFromCSV");
@@ -154,9 +153,10 @@ public class MapGenerator : MonoBehaviour
                     ElevateTerrainAround(position);
                     float terrainHeight = terrain.SampleHeight(position);
 
-                    // Instantiate the house prefab at the adjusted height with +4 offset
+                    // Instantiate the house prefab at the adjusted height with bottom aligned
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                    Instantiate(housePrefab, new Vector3(position.x, terrainHeight + 5, position.z), Quaternion.identity);
+                    float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+                    Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
                 }
                 catch (Exception ex)
                 {
@@ -210,7 +210,7 @@ public class MapGenerator : MonoBehaviour
                 else if (terrainHeight < houseHeight - 4)
                 {
                     heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
-                }   
+                }
             }
         }
 
@@ -274,7 +274,6 @@ public class MapGenerator : MonoBehaviour
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
         Debug.Log("Terrain elevation applied");
-    
     }
 
     void AddTerrainLayer()
@@ -324,8 +323,6 @@ public class MapGenerator : MonoBehaviour
         float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
         float falloff = Mathf.Clamp01(1 - distance / maxDistance);
         float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
-
-        //
 
         // Calculate height increment with maximum limit at the center and plateau effect near the top
         float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
@@ -479,7 +476,6 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-
     bool IsValidSpawnPosition(Vector3 position)
     {
         foreach (Vector3 housePosition in housePositions.Values)
@@ -499,6 +495,102 @@ public class MapGenerator : MonoBehaviour
         }
 
         return true;
+    }
+
+    void GeneratePonds()
+    {
+        int numPonds = UnityEngine.Random.Range(1, 3); // Randomly decide to generate 1 or 2 ponds
+        for (int i = 0; i < numPonds; i++)
+        {
+            Vector3 position;
+            int attempts = 0;
+            bool validPosition = false;
+
+            do
+            {
+                float x = UnityEngine.Random.Range(terrain.transform.position.x, terrain.transform.position.x + terrain.terrainData.size.x);
+                float z = UnityEngine.Random.Range(terrain.transform.position.z, terrain.transform.position.z + terrain.terrainData.size.z);
+                position = new Vector3(x, terrain.SampleHeight(new Vector3(x, 0, z)), z);
+
+                validPosition = IsValidPondPosition(position);
+                attempts++;
+            } while (!validPosition && attempts < 10);
+
+            if (validPosition)
+            {
+                CreatePond(position);
+            }
+        }
+    }
+
+    bool IsValidPondPosition(Vector3 position)
+    {
+        foreach (Vector3 housePosition in housePositions.Values)
+        {
+            if (Vector3.Distance(position, housePosition) < 10f) // Ensure the pond is not too close to a house
+            {
+                return false;
+            }
+        }
+
+        foreach (Vector3 roadPosition in roadPositions)
+        {
+            if (Vector3.Distance(position, roadPosition) < 5f) // Ensure the pond is not too close to a road
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void CreatePond(Vector3 position)
+    {
+        Debug.Log($"Creating pond at position: {position}");
+
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        // Convert position to terrain coordinates
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        // Define the area around the position to lower
+        int radius = 15; // Adjust the radius as needed
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        // Get the current heights
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
+
+        // Lower the terrain to create the pond
+        for (int x = 0; x < heights.GetLength(0); x++)
+        {
+            for (int z = 0; z < heights.GetLength(1); z++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
+                float falloff = Mathf.Clamp01(1 - (distance / radius));
+
+                heights[x, z] -= falloff * 0.1f; // Lower the terrain to create the pond
+            }
+        }
+
+        // Set the modified heights back to the terrain
+        terrainData.SetHeights(startX, startZ, heights);
+
+        // Instantiate the water prefab at the pond's location
+        if (waterPrefab != null)
+        {
+            Vector3 waterPosition = new Vector3(position.x, position.y - 0.5f, position.z); // Adjust the water height as needed
+            GameObject water = Instantiate(waterPrefab, waterPosition, Quaternion.identity);
+            water.transform.localScale = new Vector3(radius * 2, 1, radius * 2); // Adjust the scale to fit the pond size
+        }
+        Debug.Log("Pond created");
     }
 
     string[] ParseCSVLine(string line)
