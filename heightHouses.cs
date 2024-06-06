@@ -21,6 +21,8 @@ public class MapGenerator : MonoBehaviour
     public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
     public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
     public GameObject waterPrefab; // Assign the water prefab here
+    public float waterHeight = 2f; // Height of the water
+    public float checkRadius = 10f; // Radius to check for nearby houses
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
@@ -140,7 +142,6 @@ public class MapGenerator : MonoBehaviour
         terrainData.treeInstances = newTreeInstances.ToArray();
     }
 
-    // Updated PlaceWater method
     void PlaceWater()
     {
         if (waterPrefab == null)
@@ -168,7 +169,7 @@ public class MapGenerator : MonoBehaviour
         // Position the water at the center of the terrain with a height of 2
         water.transform.position = new Vector3(
             terrainPosition.x + terrainSize.x / 2,
-            2,
+            waterHeight,
             terrainPosition.z + terrainSize.z / 2
         );
 
@@ -219,6 +220,19 @@ public class MapGenerator : MonoBehaviour
                     ElevateTerrainAround(position);
                     float terrainHeight = terrain.SampleHeight(position);
 
+                    // Adjust the y-coordinate for houses at y value of 5
+                    if (Mathf.Approximately(position.y, 5f))
+                    {
+                        position.y += 1f; // Increase y-coordinate by 1
+                    }
+
+                    // Check for nearby houses and adjust the y-coordinate if needed
+                    float highestNearbyY = GetHighestNearbyHouseY(position);
+                    if (highestNearbyY > position.y)
+                    {
+                        position.y = highestNearbyY;
+                    }
+
                     // Instantiate the house prefab at the adjusted height with bottom aligned
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
@@ -238,6 +252,19 @@ public class MapGenerator : MonoBehaviour
         GenerateRoadsFromMST();
     }
 
+    float GetHighestNearbyHouseY(Vector3 position)
+    {
+        float highestY = position.y;
+        foreach (Vector3 housePosition in housePositions.Values)
+        {
+            if (Vector3.Distance(position, housePosition) < checkRadius && housePosition.y > highestY)
+            {
+                highestY = housePosition.y;
+            }
+        }
+        return highestY;
+    }
+
     void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
     {
         TerrainData terrainData = terrain.terrainData;
@@ -251,7 +278,7 @@ public class MapGenerator : MonoBehaviour
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
         // Define the area around the position to check and adjust
-        int radius = 9; // Larger radius for smooth transition
+        int radius = 7; // Smaller radius for smoother transition
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -310,7 +337,7 @@ public class MapGenerator : MonoBehaviour
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
         // Calculate maximum elevation based on elevation factor
-        float maxElevation = Mathf.Min(50f, position.y * elevationFactor) / terrainData.size.y;
+        float maxElevation = Mathf.Min(45f, position.y * elevationFactor) / terrainData.size.y;
         float maxIncr = 0;
         float mindist = 300;
         // Calculate falloff based on distance from the center
@@ -384,7 +411,7 @@ public class MapGenerator : MonoBehaviour
     {
         // Adjust the parameters as needed for your desired falloff curve
         float maxDistance = 30f; // Radius
-        float plateauThreshold = 0.8f; // Threshold for plateau effect
+        float plateauThreshold = 1f; // Threshold for plateau effect
         float plateauStrength = 0.5f; // Strength of plateau effect
         float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
         float falloff = Mathf.Clamp01(1 - distance / maxDistance);
@@ -478,6 +505,7 @@ public class MapGenerator : MonoBehaviour
         Vector3 midPoint = (position1 + position2) / 2;
         float roadLength = Vector3.Distance(position1, position2);
         float roadWidth = 0.1f; // Adjust road width to smaller size
+        float minHeightAboveWater = waterHeight + 0.1f; // Minimum height of the road above the water
 
         GameObject road = Instantiate(roadPrefab, midPoint, Quaternion.identity);
 
@@ -485,8 +513,12 @@ public class MapGenerator : MonoBehaviour
         road.transform.LookAt(position2);
         road.transform.Rotate(270, 0, 0); // Rotate the road to be horizontal and properly aligned
 
-        // Adjust the road height to match the terrain at the midpoint
-        midPoint.y = terrain.SampleHeight(midPoint) + 0.1f; // Slightly above the terrain
+        // Adjust the y-coordinates of the start, end, and midpoint to ensure they stay above the water level
+        position1.y = Mathf.Max(terrain.SampleHeight(position1) + 0.1f, minHeightAboveWater);
+        position2.y = Mathf.Max(terrain.SampleHeight(position2) + 0.1f, minHeightAboveWater);
+        midPoint.y = Mathf.Max(terrain.SampleHeight(midPoint) + 0.1f, minHeightAboveWater);
+
+        // Set the positions of the road segments
         road.transform.position = midPoint;
 
         // Add road positions to avoid spawning trees and rocks on them
@@ -539,6 +571,12 @@ public class MapGenerator : MonoBehaviour
 
     bool IsValidSpawnPosition(Vector3 position)
     {
+        // Avoid water
+        if (position.y < waterHeight + 0.1f) // Allow a slight margin above the water
+        {
+            return false;
+        }
+
         foreach (Vector3 housePosition in housePositions.Values)
         {
             if (Vector3.Distance(position, housePosition) < 5f) // Adjust the minimum distance as needed
