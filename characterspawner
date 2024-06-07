@@ -1,125 +1,96 @@
 using System.Collections.Generic;
+using System.Globalization; // To handle number formats
+using System.IO;
 using UnityEngine;
+using System.Linq;
 
 public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab; // Assign your character prefab here
-
-    private List<Vector3> coordinates = new List<Vector3>
-    {
-        new Vector3(-3175.631591796875f, 1484.593017578125f, 40.0f),
-        new Vector3(-3261.30029296875f, 1351.998291015625f, 8.92555784736546f),
-        new Vector3(-3609.6435546875f, 1155.01953125f, 12.128258016126008f),
-        new Vector3(-3334.5439453125f, 1319.1236572265625f, 9.034314644665292f),
-        new Vector3(-3484.60205078125f, 1182.809326171875f, 9.803112694543408f),
-        new Vector3(-4396.77978515625f, 1281.8548583984375f, 7.950496906056628f),
-        new Vector3(-4243.16064453125f, 1235.814697265625f, 6.892930808175511f),
-        new Vector3(-4244.990234375f, 1082.476806640625f, 17.67860491280705f),
-        new Vector3(-4414.16748046875f, 1259.763427734375f, 10.215638477404838f),
-        new Vector3(-4225.28759765625f, 1160.5899658203125f, 4.916557284830302f),
-        new Vector3(-4309.53515625f, 1382.28173828125f, 2.78267391711982f),
-        new Vector3(-4227.12890625f, 1368.7685546875f, 2.5014063378961184f),
-        new Vector3(-3869.040771484375f, 1278.427001953125f, 17.371085692855804f),
-        new Vector3(-3675.1171875f, 1274.837158203125f, 12.045752859553723f),
-        new Vector3(-4055.11962890625f, 1157.249267578125f, 7.166697918619914f),
-        new Vector3(-4020.1865234375f, 1047.347412109375f, 5.430339396212263f),
-        new Vector3(-3935.111083984375f, 1142.4769287109375f, 9.173073317082318f),
-        new Vector3(-4049.1181640625f, 1182.2305908203125f, 12.612038252390775f),
-        new Vector3(-3879.1220703125f, 1368.205322265625f, 13.79336208513032f),
-        new Vector3(-3798.675048828125f, 1627.2071533203125f, 24.616538533658353f),
-        new Vector3(-3830.65673828125f, 1545.345947265625f, 14.712169510594412f),
-        new Vector3(-3686.377197265625f, 1606.5404052734375f, 13.519594974685917f),
-        new Vector3(-3480.827392578125f, 1764.97216796875f, 7.736733545846615f),
-        new Vector3(-3242.225830078125f, 1865.05810546875f, 8.216763547721733f),
-        new Vector3(-3250.927734375f, 1823.0960693359375f, 10.594412150759423f),
-        new Vector3(-3438.10791015625f, 1762.8079833984375f, 9.44684042752672f),
-        new Vector3(-3420.993408203125f, 1954.7900390625f, 9.21432589536846f),
-        new Vector3(-3414.344970703125f, 1883.6636962890625f, 9.143071441965123f),
-        new Vector3(-3279.603271484375f, 1076.3426513671875f, 10.14813425839115f),
-        new Vector3(-3259.494140625f, 869.9007568359375f, 5.959122445152822f),
-        new Vector3(-3209.06689453125f, 669.3524780273438f, 4.52278267391712f),
-        new Vector3(-3441.329345703125f, 1447.8636474609375f, 9.724357772360772f),
-        new Vector3(-3509.302978515625f, 1023.342041015625f, 8.190511906994187f),
-        new Vector3(-3673.33837890625f, 959.8041381835938f, 6.307894243390212f),
-        new Vector3(-3391.443603515625f, 898.267822265625f, 14.843427714232138f),
-        new Vector3(-3025.06689453125f, 729.6502685546875f, 10.088130508156759f),
-        new Vector3(-2894.213623046875f, 751.4495849609375f, 10.016876054753421f),
-        new Vector3(-2924.602783203125f, 932.0051879882812f, 2.921432589536846f),
-        new Vector3(-3028.37353515625f, 1222.41162109375f, 1.6313519594974686f),
-        new Vector3(-2823.69482421875f, 1261.44580078125f, 6.064129008063004f),
-        new Vector3(-2827.5712890625f, 1216.040283203125f, 5.85411588224264f),
-        new Vector3(-3084.919189453125f, 1007.4834594726562f, 3.1801987624226515f),
-        new Vector3(-3007.73388671875f, 1145.4610595703125f, 2.1263828989311833f),
-        new Vector3(-2882.340576171875f, 351.1358337402344f, 6.150384399024939f),
-        new Vector3(-2534.248779296875f, 677.7500610351562f, 2.5126570410650664f),
-        new Vector3(-2608.592041015625f, 653.8494262695312f, 3.453965872867054f),
-        new Vector3(-3122.392578125f, 390.1804504394531f, 5.914119632477029f),
-        new Vector3(-3814.050537109375f, 588.905029296875f, 5.842865179073692f),
-        new Vector3(-2494.176025390625f, 550.4452514648438f, 0.0f),
-        new Vector3(-2671.5751953125f, 800.7630004882812f, 1.5713482092630788f),
-        new Vector3(-2765.85498046875f, 1778.684326171875f, 23.446465404087753f),
-        new Vector3(-2588.497802734375f, 1554.670654296875f, 18.646165385336584f),
-        new Vector3(-2682.562255859375f, 1401.3154296875f, 16.00225014063379f),
-        new Vector3(-2630.21923828125f, 1684.72021484375f, 10.946934183386462f),
-        new Vector3(-2527.880126953125f, 1504.649658203125f, 12.030751921995124f),
-        new Vector3(-2757.24658203125f, 1612.5552978515625f, 5.4153384586536655f),
-        new Vector3(-2596.041015625f, 1971.452880859375f, 14.2096381023814f),
-        new Vector3(-2752.466552734375f, 1998.9447021484375f, 7.399212450778173f),
-        new Vector3(-2722.025634765625f, 2091.22509765625f, 12.218263641477591f),
-        new Vector3(-2711.93115234375f, 2080.259033203125f, 7.0879429964372775f),
-        new Vector3(-2427.558349609375f, 2045.000732421875f, 8.05925370335646f),
-        new Vector3(-2434.74853515625f, 2083.037109375f, 5.314082130133134f),
-        new Vector3(-2288.392822265625f, 1927.38427734375f, 5.617851115694731f),
-        new Vector3(-2390.300048828125f, 1873.31787109375f, 4.2527657978623665f),
-        new Vector3(-2371.61328125f, 1836.8707275390625f, 3.603975248453028f),
-        new Vector3(-2495.16943359375f, 1291.0499267578125f, 11.914494655915995f),
-        new Vector3(-3784.208251953125f, 539.790283203125f, 7.965497843615226f),
-        new Vector3(-2159.3837890625f, 1361.900634765625f, 6.817926120382523f),
-        new Vector3(-2293.60986328125f, 1488.85302734375f, 6.169135570973186f),
-        new Vector3(-2421.44921875f, 1304.1170654296875f, 9.810613163322708f),
-        new Vector3(-2331.0478515625f, 1244.13671875f, 5.400337521095068f),
-        new Vector3(-2241.389892578125f, 1324.1527099609375f, 3.7014813425839113f),
-        new Vector3(-2189.43505859375f, 1300.6368408203125f, 9.165572848303018f),
-        new Vector3(-2234.376953125f, 1189.3614501953125f, 5.749109319332458f),
-        new Vector3(-2725.849365234375f, 983.547119140625f, 13.257078567410463f),
-        new Vector3(-2542.95263671875f, 1039.334228515625f, 6.8479279954997185f),
-        new Vector3(-2572.340087890625f, 1117.9161376953125f, 7.871741983873992f),
-        new Vector3(-3061.2041015625f, 21.072444915771484f, 20.532533283330206f),
-        new Vector3(-2934.260009765625f, 155.54058837890625f, 11.201950121882618f),
-        new Vector3(-3112.88037109375f, 125.20652770996094f, 12.132008250515657f),
-        new Vector3(-3184.343994140625f, -41.48003005981445f, 14.303393962122632f),
-        new Vector3(-3094.04296875f, -16.429216384887695f, 9.870616913557097f),
-        new Vector3(-2951.365966796875f, -129.97039794921875f, 8.306769173073317f),
-        new Vector3(-3212.032958984375f, 103.42406463623047f, 20.307519219951246f),
-        new Vector3(-3047.8671875f, 232.5196075439453f, 17.191074442152633f),
-        new Vector3(-3845.56298828125f, 613.3267822265625f, 12.57078567410463f),
-        new Vector3(-3083.425537109375f, 216.83924865722656f, 9.413088318019875f),
-        new Vector3(-3307.591552734375f, 204.49362182617188f, 10.050628164260266f),
-        new Vector3(-2890.207763671875f, 99.49154663085938f, 12.98331145696606f),
-        new Vector3(-2843.54541015625f, 112.63123321533203f, 33.78586161635102f),
-        new Vector3(-2199.779052734375f, 1666.391845703125f, 10.673167072942059f),
-        new Vector3(-2118.83251953125f, 1796.7657470703125f, 6.326645415338459f),
-        new Vector3(-3770.866943359375f, 562.4539794921875f, 6.8216763547721735f),
-        new Vector3(-2019.7568359375f, 1742.145263671875f, 7.511719482467654f),
-        new Vector3(-2005.422607421875f, 1613.22412109375f, 7.039189949371836f),
-        new Vector3(-1965.9666748046875f, 1620.58544921875f, 5.842865179073692f),
-        new Vector3(-2278.6064453125f, 675.2711791992188f, 13.699606225389086f),
-        new Vector3(-2144.475341796875f, 717.98046875f, 9.754359647477967f),
-        new Vector3(-2071.08984375f, 874.9950561523438f, 7.924245265329083f),
-        new Vector3(-2211.507568359375f, 807.7250366210938f, 8.104256516032251f),
-        new Vector3(-2434.28369140625f, 856.68310546875f, 8.64054003375211f)
-    };
+    [SerializeField] private string csvFileName = "coordinates.csv"; // Name of the CSV file in the Assets folder
 
     void Start()
     {
-        SpawnCharacters();
+        string filePath = Path.Combine(Application.dataPath, csvFileName);
+        List<Vector3> coordinates = ReadCoordinatesFromCSV(filePath);
+        SpawnCharacters(coordinates);
     }
 
-    private void SpawnCharacters()
+    private List<Vector3> ReadCoordinatesFromCSV(string filePath)
+    {
+        List<Vector3> coordinates = new List<Vector3>();
+
+        try
+        {
+            // Read all lines from the CSV file
+            var lines = File.ReadAllLines(filePath);
+
+            // Skip the header line and parse the rest
+            foreach (var line in lines.Skip(1))
+            {
+                // Split the line by commas, but taking care of quoted strings
+                var values = SplitCsvLine(line);
+
+                if (values.Length >= 4)
+                {
+                    // Try to parse the x, y, z coordinates
+                    if (float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                        float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
+                        float.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+                    {
+                        // Create a new Vector3 and add to the list
+                        coordinates.Add(new Vector3(x, y, z));
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Failed to parse coordinates for line: {line}");
+                    }
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Error reading CSV file: " + ex.Message);
+        }
+
+        return coordinates;
+    }
+
+    private void SpawnCharacters(List<Vector3> coordinates)
     {
         foreach (var coordinate in coordinates)
         {
             Instantiate(characterPrefab, coordinate, Quaternion.identity);
         }
+    }
+
+    // Utility method to correctly split a CSV line taking care of quoted strings
+    private string[] SplitCsvLine(string line)
+    {
+        List<string> values = new List<string>();
+        bool inQuotes = false;
+        string value = "";
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+
+            if (c == '"' && (i == 0 || line[i - 1] != '\\'))
+            {
+                inQuotes = !inQuotes; // Toggle state
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                values.Add(value);
+                value = "";
+            }
+            else
+            {
+                value += c;
+            }
+        }
+        values.Add(value);
+
+        return values.ToArray();
     }
 }
