@@ -30,6 +30,10 @@ public class MapGenerator : MonoBehaviour
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
 
+    private Camera miniMapCamera; // Mini-map camera
+    private GameObject miniMapUI; // Mini-map UI element
+    private bool isMiniMapVisible = false; // Toggle for mini-map visibility
+
     void Start()
     {
         Debug.Log("MapGenerator Start");
@@ -60,6 +64,7 @@ public class MapGenerator : MonoBehaviour
         SpawnTreesAndRocks();
         RemoveTreesBelowHeight(3f);
         PlaceWater(); // Add water layer
+        SetupMiniMap(); // Setup the mini-map camera and UI
     }
 
     void CalculateTerrainSize()
@@ -244,6 +249,7 @@ public class MapGenerator : MonoBehaviour
 
         GenerateRoadsFromMST();
     }
+
     float GetHighestNearbyHouseY(Vector3 position)
     {
         float highestY = position.y;
@@ -632,6 +638,11 @@ public class MapGenerator : MonoBehaviour
         {
             RestoreOriginalTerrain();
         }
+
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            ToggleMiniMap();
+        }
     }
 
     void RestoreOriginalTerrain()
@@ -688,5 +699,45 @@ public class MapGenerator : MonoBehaviour
         {
             return 30;
         }
+    }
+
+    void SetupMiniMap()
+    {
+        // Create a new GameObject for the mini-map camera
+        GameObject miniMapCameraObject = new GameObject("MiniMapCamera");
+        miniMapCamera = miniMapCameraObject.AddComponent<Camera>();
+
+        // Configure the mini-map camera
+        miniMapCamera.orthographic = true;
+        miniMapCamera.orthographicSize = Mathf.Max(maxX - minX, maxZ - minZ) / 2f;
+        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 100, (minZ + maxZ) / 2);
+        miniMapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);
+        miniMapCamera.cullingMask = LayerMask.GetMask("Default");
+
+        // Set the mini-map camera to render to a render texture
+        miniMapCamera.targetTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32);
+        miniMapCamera.gameObject.SetActive(false);
+
+        // Create a UI element to display the mini-map
+        miniMapUI = new GameObject("MiniMapUI");
+        Canvas canvas = miniMapUI.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+        GameObject rawImageObject = new GameObject("MiniMapImage");
+        rawImageObject.transform.parent = miniMapUI.transform;
+        UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
+        rawImage.texture = miniMapCamera.targetTexture;
+        RectTransform rectTransform = rawImage.GetComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0.75f, 0.75f); // Adjust the position on the screen
+        rectTransform.anchorMax = new Vector2(1f, 1f);
+        rectTransform.sizeDelta = new Vector2(256, 256); // Adjust the size of the mini-map
+        miniMapUI.SetActive(false); // Start with the mini-map hidden
+    }
+
+    void ToggleMiniMap()
+    {
+        isMiniMapVisible = !isMiniMapVisible;
+        miniMapCamera.gameObject.SetActive(isMiniMapVisible);
+        miniMapUI.SetActive(isMiniMapVisible);
     }
 }
