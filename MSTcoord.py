@@ -122,11 +122,23 @@ class ClusterCreator:
         self.clusters.set_index('id', inplace=True)
         self.workbench['cluster'] = self.workbench['Label'].map(self.skill_cluster_mapping)
 
-        umap_model = UMAP(n_neighbors=50, min_dist=0.1, n_components=2, metric='cosine')
+        umap_model = UMAP(n_neighbors=50, min_dist=0.5, n_components=2, metric='cosine')
         embedding_array = np.stack(self.workbench['embedding'])
-        umap_coords = umap_model.fit_transform(embedding_array) * 500
+        umap_coords = umap_model.fit_transform(embedding_array) * 750
         self.umap_coords = pd.Series(umap_coords.tolist())
         self.workbench['umap_coords'] = self.umap_coords
+
+        # Spread out the UMAP coordinates
+        self.spread_out_umap_coords()
+
+    def spread_out_umap_coords(self):
+        """
+        Adjust the UMAP coordinates to increase spacing between houses.
+        """
+        spread_factor = 200  # You can adjust this factor as needed for more spacing
+        for i, coords in enumerate(self.umap_coords):
+            # Add a fixed offset to spread out the points
+            self.umap_coords[i] = (coords[0] + (i % 10) * spread_factor, coords[1] + (i // 10) * spread_factor)
 
     def merge_cluster(self, parent_id, child_id):
         child_nodes = self.cluster_nodes.pop(child_id, [])
@@ -186,7 +198,7 @@ class ClusterCreator:
             return
 
         def normalize_view_count(view_count, min_view, max_view):
-            return -10 + (view_count - min_view) * (110 / (max_view - min_view))
+            return 5 + (view_count - min_view) * (40 / (max_view - min_view))
         
         umap_coords_df['z'] = [normalize_view_count(vc, min_view_count, max_view_count) for vc in view_counts]
 
