@@ -244,7 +244,6 @@ public class MapGenerator : MonoBehaviour
 
         GenerateRoadsFromMST();
     }
-
     float GetHighestNearbyHouseY(Vector3 position)
     {
         float highestY = position.y;
@@ -342,7 +341,7 @@ public class MapGenerator : MonoBehaviour
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
 
                 // Calculate height increment based on maximum elevation and falloff
-                float heightIncrement = CalculateHeightIncrement(distance, maxElevation);
+                float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
 
                 if (heightIncrement > maxIncr && distance < mindist)
                 {
@@ -400,7 +399,7 @@ public class MapGenerator : MonoBehaviour
         Debug.Log("Terrain layer added successfully.");
     }
 
-    float CalculateHeightIncrement(float distance, float maxElevation)
+    float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
         // Adjust the parameters as needed for your desired falloff curve
         float maxDistance = 30f; // Radius
@@ -412,6 +411,11 @@ public class MapGenerator : MonoBehaviour
 
         // Calculate height increment with maximum limit at the center and plateau effect near the top
         float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
+        if (radius < 75)
+        {
+            falloff = Mathf.Clamp01(1 - distance / radius);
+            heightIncrement = falloff * maxElevation;
+        }
 
         return heightIncrement;
     }
@@ -676,9 +680,9 @@ public class MapGenerator : MonoBehaviour
         {
             return 0; // No valid distance found
         }
-        else if (nearestDistance < 100)
+        else if (nearestDistance < 75)
         {
-            return Mathf.RoundToInt(nearestDistance / 2);
+            return Mathf.RoundToInt(nearestDistance / 5);
         }
         else
         {
