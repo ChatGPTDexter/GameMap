@@ -226,13 +226,6 @@ public class MapGenerator : MonoBehaviour
                         position.y += 1f; // Increase y-coordinate by 1
                     }
 
-                    // Check for nearby houses and adjust the y-coordinate if needed
-                    float highestNearbyY = GetHighestNearbyHouseY(position);
-                    if (highestNearbyY > position.y)
-                    {
-                        position.y = highestNearbyY;
-                    }
-
                     // Instantiate the house prefab at the adjusted height with bottom aligned
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
@@ -325,7 +318,7 @@ public class MapGenerator : MonoBehaviour
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
         // Define the area around the position to elevate
-        int radius = 30; // Adjust the radius as needed
+        int radius = CalculateAdjustedDistance(position); // Adjust the radius as needed
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -655,5 +648,41 @@ public class MapGenerator : MonoBehaviour
         terrain.terrainData.terrainLayers = newLayersList.ToArray();
         terrain.transform.position = new Vector3(0, 0, 0);
         Debug.Log("Terrain restored to original state.");
+    }
+
+    public int CalculateAdjustedDistance(Vector3 position)
+    {
+        float nearestDistance = float.MaxValue;
+
+        foreach (var houseEntry in housePositions)
+        {
+            Vector3 housePosition = houseEntry.Value;
+            // Calculate horizontal distance using only x and z coordinates
+            float distance = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(housePosition.x, housePosition.z));
+
+            // Skip if the distance is 0
+            if (distance == 0)
+            {
+                continue;
+            }
+
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+            }
+        }
+
+        if (nearestDistance == float.MaxValue)
+        {
+            return 0; // No valid distance found
+        }
+        else if (nearestDistance < 100)
+        {
+            return Mathf.RoundToInt(nearestDistance / 2);
+        }
+        else
+        {
+            return 30;
+        }
     }
 }
