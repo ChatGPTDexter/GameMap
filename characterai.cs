@@ -11,7 +11,7 @@ public class CharacterAI : MonoBehaviour
     public TMP_InputField userInputField; // The input field for user questions
     public TMP_Text responseText; // The text field for AI responses
 
-    private const string OpenAIAPIKey = "sk-proj-MKzHsWumhHKJVsA0gzYdT3BlbkFJVu2XFm9p0zW2055DuOEO"; // Replace with your OpenAI API key
+    private const string OpenAIAPIKey = "your-openai-api-key"; // Replace with your OpenAI API key
     private const string OpenAIEndpoint = "https://api.openai.com/v1/completions"; // GPT-3/4 Endpoint
 
     // Method to initialize the character with its specific data
