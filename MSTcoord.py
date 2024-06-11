@@ -129,6 +129,9 @@ class ClusterCreator:
 
         # Spread out the UMAP coordinates
         self.spread_out_umap_coords()
+        
+        # Ensure minimum distance between coordinates
+        self.ensure_minimum_distance()
 
     def spread_out_umap_coords(self):
         """
@@ -138,6 +141,39 @@ class ClusterCreator:
         for i, coords in enumerate(self.umap_coords):
             # Add a fixed offset to spread out the points
             self.umap_coords[i] = (coords[0] + (i % 10) * spread_factor, coords[1] + (i // 10) * spread_factor, coords[2])
+
+    def ensure_minimum_distance(self):
+        """
+        Ensure that the minimum distance between any two points is at least 50.
+        """
+        min_distance = 50
+        max_iterations = 1000  # Avoid infinite loops
+        iteration = 0
+        
+        while iteration < max_iterations:
+            adjusted = False
+            coords_array = np.stack(self.umap_coords)
+            pairwise_distances = np.linalg.norm(coords_array[:, None] - coords_array, axis=-1)
+            np.fill_diagonal(pairwise_distances, np.inf)  # Ignore self-distances
+            
+            for i in range(len(coords_array)):
+                for j in range(i+1, len(coords_array)):
+                    if pairwise_distances[i, j] < min_distance:
+                        adjusted = True
+                        # Move the points apart
+                        direction = coords_array[i] - coords_array[j]
+                        direction /= np.linalg.norm(direction)
+                        move_vector = direction * (min_distance - pairwise_distances[i, j]) / 2
+                        coords_array[i] += move_vector
+                        coords_array[j] -= move_vector
+                        
+            if not adjusted:
+                break
+            self.umap_coords = pd.Series(coords_array.tolist())
+            iteration += 1
+        
+        if iteration == max_iterations:
+            print("Warning: Maximum iterations reached while ensuring minimum distance. Some points may still be too close.")
 
     def merge_cluster(self, parent_id, child_id):
         child_nodes = self.cluster_nodes.pop(child_id, [])
