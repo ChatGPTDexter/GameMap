@@ -20,12 +20,19 @@ public class MapGenerator : MonoBehaviour
     public Texture2D textureToAdd; // The new texture layer to add
     public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
     public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
+    public GameObject waterPrefab; // Assign the water prefab here
+    public float waterHeight = 2f; // Height of the water
+    public float checkRadius = 10f; // Radius to check for nearby houses
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
     private float[,] originalHeights; // Store original terrain heights
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
+
+    private Camera miniMapCamera; // Mini-map camera
+    private GameObject miniMapUI; // Mini-map UI element
+    private bool isMiniMapVisible = false; // Toggle for mini-map visibility
 
     void Start()
     {
@@ -55,7 +62,9 @@ public class MapGenerator : MonoBehaviour
         GenerateMapFromCSV();
         AddTerrainLayer();
         SpawnTreesAndRocks();
-        
+        RemoveTreesBelowHeight(3f);
+        PlaceWater(); // Add water layer
+        SetupMiniMap(); // Setup the mini-map camera and UI
     }
 
     void CalculateTerrainSize()
@@ -100,12 +109,77 @@ public class MapGenerator : MonoBehaviour
     void AdjustTerrainSize()
     {
         TerrainData terrainData = terrain.terrainData;
-        Vector3 terrainSize = new Vector3(maxX - minX + 100, terrainData.size.y, maxZ - minZ + 100);
+        Vector3 terrainSize = new Vector3(maxX - minX + 200, terrainData.size.y, maxZ - minZ + 200);
         terrainData.size = terrainSize;
-        terrain.transform.position = new Vector3(minX - 50, 0, minZ - 50);
+        terrain.transform.position = new Vector3(minX - 100, 0, minZ - 100);
         Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
+    void RemoveTreesBelowHeight(float heightThreshold)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainSize = terrainData.size;
+        Vector3 terrainPosition = terrain.GetPosition();
+
+        List<TreeInstance> newTreeInstances = new List<TreeInstance>();
+
+        foreach (TreeInstance tree in terrainData.treeInstances)
+        {
+            // Convert tree position from terrain coordinates to world coordinates
+            Vector3 treeWorldPosition = new Vector3(
+                terrainPosition.x + tree.position.x * terrainSize.x,
+                0f,
+                terrainPosition.z + tree.position.z * terrainSize.z
+            );
+
+            // Sample height at tree position
+            float height = terrain.SampleHeight(treeWorldPosition);
+
+            // Check if height is greater than the specified threshold
+            if (height > heightThreshold)
+            {
+                // Add tree instance to the new list if height is above the threshold
+                newTreeInstances.Add(tree);
+            }
+        }
+
+        // Update terrain tree instances with the new list
+        terrainData.treeInstances = newTreeInstances.ToArray();
+    }
+
+    void PlaceWater()
+    {
+        if (waterPrefab == null)
+        {
+            Debug.LogError("Water prefab not assigned.");
+            return;
+        }
+
+        // Calculate terrain size and position
+        Vector3 terrainSize = terrain.terrainData.size;
+        Vector3 terrainPosition = terrain.transform.position;
+
+        // Instantiate the water prefab
+        GameObject water = Instantiate(waterPrefab);
+
+        if (water == null)
+        {
+            Debug.LogError("Failed to instantiate water prefab.");
+            return;
+        }
+
+        // Scale the water to match the terrain size
+        water.transform.localScale = new Vector3(terrainSize.x, 1, terrainSize.z);
+
+        // Position the water at the center of the terrain with a height of 2
+        water.transform.position = new Vector3(
+            terrainPosition.x + terrainSize.x / 2,
+            waterHeight,
+            terrainPosition.z + terrainSize.z / 2
+        );
+
+        Debug.Log("Water placed at height 2, size of terrain, and shape of square.");
+    }
 
     void GenerateMapFromCSV()
     {
@@ -120,6 +194,7 @@ public class MapGenerator : MonoBehaviour
             Debug.LogError("House CSV file is empty.");
             return;
         }
+
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -143,33 +218,89 @@ public class MapGenerator : MonoBehaviour
             {
                 Vector3 position = new Vector3(x, y, z);
                 housePositions[label] = position;
+
                 try
                 {
-                    // Adjust terrain and get the corrected height
+                    // Elevate terrain around the position
                     ElevateTerrainAround(position);
+                    float terrainHeight = terrain.SampleHeight(position);
 
-                    // Instantiate the house prefab
+                    // Ensure the house is above the terrain
+                    position.y = terrainHeight + 0.1f;
+
+                    // Instantiate the house prefab at the adjusted height with bottom aligned
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                    GameObject houseInstance = Instantiate(housePrefab, position, Quaternion.identity);
-
-                    // Get the bounds of the house prefab
-                    Bounds bounds = houseInstance.GetComponent<Renderer>().bounds;
-
-                    // Calculate the distance between the center and bottom of the house prefab
-                    float heightFromCenterToBottom = bounds.extents.y;
-
-                    // Adjust the position of the house instance to align the bottom with the coordinate
-                    houseInstance.transform.position = new Vector3(position.x, position.y - heightFromCenterToBottom, position.z);
+                    float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+                    Instantiate(housePrefab, new Vector3(position.x, position.y + (houseHeight / 2), position.z), Quaternion.identity);
+                    Debug.Log($"Spawning house at y={position.y + (houseHeight / 2)}");
                 }
                 catch (Exception ex)
                 {
                     Debug.LogError($"Error adjusting terrain at position {position}: {ex.Message}");
                 }
             }
+            else
+            {
+                Debug.LogWarning($"Failed to parse coordinates or view count: {line}");
+            }
         }
 
         GenerateRoadsFromMST();
     }
+
+
+    float GetHighestNearbyHouseY(Vector3 position)
+    {
+        float highestY = position.y;
+        foreach (Vector3 housePosition in housePositions.Values)
+        {
+            if (Vector3.Distance(position, housePosition) < checkRadius && housePosition.y > highestY)
+            {
+                highestY = housePosition.y;
+            }
+        }
+        return highestY;
+    }
+
+    void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        // Convert position to terrain coordinates
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        // Define the area around the position to check and adjust
+        int radius = 50; // Increase the radius for smoother transition
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        // Get the current heights in the area
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
+
+        // Adjust terrain heights with smooth transition
+        for (int x = 0; x < heights.GetLength(0); x++)
+        {
+            for (int z = 0; z < heights.GetLength(1); z++)
+            {
+                float terrainHeight = heights[x, z] * terrainData.size.y + terrainPos.y;
+                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
+                float falloff = Mathf.Clamp01(1 - (distance / radius));
+
+                heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
+            }
+        }
+
+        // Set the modified heights back to the terrain
+        terrainData.SetHeights(startX, startZ, heights);
+    }
+
 
     void ElevateTerrainAround(Vector3 position)
     {
@@ -184,8 +315,9 @@ public class MapGenerator : MonoBehaviour
         // Convert position to terrain coordinates
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
         // Define the area around the position to elevate
-        int radius = 30; // Adjust the radius as needed
+        int radius = 50; // Increase the radius to create larger mounds
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -197,9 +329,8 @@ public class MapGenerator : MonoBehaviour
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
         // Calculate maximum elevation based on elevation factor
-        float maxElevation = Mathf.Min(50f, position.y * elevationFactor) / terrainData.size.y;
-        float maxIncr = 0;
-        float mindist = 300;
+        float maxElevation = Mathf.Min(45f, position.y * elevationFactor) / terrainData.size.y;
+
         // Calculate falloff based on distance from the center
         for (int x = 0; x < heights.GetLength(0); x++)
         {
@@ -209,27 +340,17 @@ public class MapGenerator : MonoBehaviour
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
 
                 // Calculate height increment based on maximum elevation and falloff
-                float heightIncrement = CalculateHeightIncrement(distance, maxElevation);
-
-                if (heightIncrement > maxIncr && distance < mindist)
-                {
-                    maxIncr = heightIncrement;
-                    mindist = distance;
-                }
-                else if (heightIncrement < maxIncr && distance < mindist)
-                {
-                    heightIncrement = maxIncr;
-                }
+                float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
 
                 heights[x, z] += heightIncrement;
             }
         }
+
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
-
         Debug.Log("Terrain elevation applied");
-    
     }
+
 
     void AddTerrainLayer()
     {
@@ -269,20 +390,23 @@ public class MapGenerator : MonoBehaviour
         Debug.Log("Terrain layer added successfully.");
     }
 
-    float CalculateHeightIncrement(float distance, float maxElevation)
+    float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
         // Adjust the parameters as needed for your desired falloff curve
-        float maxDistance = 30f; // Radius
-        float plateauThreshold = 0.8f; // Threshold for plateau effect
+        float maxDistance = 25f; // Radius
+        float plateauThreshold = 1f; // Threshold for plateau effect
         float plateauStrength = 0.5f; // Strength of plateau effect
         float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
         float falloff = Mathf.Clamp01(1 - distance / maxDistance);
         float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
 
-        //
-
         // Calculate height increment with maximum limit at the center and plateau effect near the top
         float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
+        if (radius < 25)
+        {
+            falloff = Mathf.Clamp01(1 - distance / radius);
+            heightIncrement = falloff * maxElevation;
+        }
 
         return heightIncrement;
     }
@@ -369,6 +493,7 @@ public class MapGenerator : MonoBehaviour
         Vector3 midPoint = (position1 + position2) / 2;
         float roadLength = Vector3.Distance(position1, position2);
         float roadWidth = 0.1f; // Adjust road width to smaller size
+        float minHeightAboveWater = waterHeight + 0.1f; // Minimum height of the road above the water
 
         GameObject road = Instantiate(roadPrefab, midPoint, Quaternion.identity);
 
@@ -376,8 +501,12 @@ public class MapGenerator : MonoBehaviour
         road.transform.LookAt(position2);
         road.transform.Rotate(270, 0, 0); // Rotate the road to be horizontal and properly aligned
 
-        // Adjust the road height to match the terrain at the midpoint
-        midPoint.y = terrain.SampleHeight(midPoint) + 0.1f; // Slightly above the terrain
+        // Adjust the y-coordinates of the start, end, and midpoint to ensure they stay above the water level
+        position1.y = Mathf.Max(terrain.SampleHeight(position1) + 0.1f, minHeightAboveWater);
+        position2.y = Mathf.Max(terrain.SampleHeight(position2) + 0.1f, minHeightAboveWater);
+        midPoint.y = Mathf.Max(terrain.SampleHeight(midPoint) + 0.1f, minHeightAboveWater);
+
+        // Set the positions of the road segments
         road.transform.position = midPoint;
 
         // Add road positions to avoid spawning trees and rocks on them
@@ -428,9 +557,14 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-
     bool IsValidSpawnPosition(Vector3 position)
     {
+        // Avoid water
+        if (position.y < waterHeight + 0.1f) // Allow a slight margin above the water
+        {
+            return false;
+        }
+
         foreach (Vector3 housePosition in housePositions.Values)
         {
             if (Vector3.Distance(position, housePosition) < 5f) // Adjust the minimum distance as needed
@@ -481,5 +615,114 @@ public class MapGenerator : MonoBehaviour
         }
 
         return fields.ToArray();
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.P))
+        {
+            RestoreOriginalTerrain();
+        }
+
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            ToggleMiniMap();
+        }
+    }
+
+    void RestoreOriginalTerrain()
+    {
+        if (terrain == null || originalHeights == null)
+        {
+            Debug.LogError("Terrain or original heights not assigned.");
+            return;
+        }
+
+        // Restore the terrain to its original state
+        terrain.terrainData.SetHeights(0, 0, originalHeights);
+
+        // Remove the added texture layer
+        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
+        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
+        terrain.terrainData.terrainLayers = newLayersList.ToArray();
+        terrain.transform.position = new Vector3(0, 0, 0);
+        Debug.Log("Terrain restored to original state.");
+    }
+
+    public int CalculateAdjustedDistance(Vector3 position)
+    {
+        float nearestDistance = float.MaxValue;
+
+        foreach (var houseEntry in housePositions)
+        {
+            Vector3 housePosition = houseEntry.Value;
+            // Calculate horizontal distance using only x and z coordinates
+            float distance = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(housePosition.x, housePosition.z));
+
+            // Skip if the distance is 0
+            if (distance == 0)
+            {
+                continue;
+            }
+
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+            }
+        }
+
+        if (nearestDistance == float.MaxValue)
+        {
+            return 0; // No valid distance found
+        }
+        else if (nearestDistance < 75)
+        {
+            return Mathf.RoundToInt(nearestDistance / 5);
+        }
+        else
+        {
+            return 25;
+        }
+    }
+
+    void SetupMiniMap()
+    {
+        // Create a new GameObject for the mini-map camera
+        GameObject miniMapCameraObject = new GameObject("MiniMapCamera");
+        miniMapCamera = miniMapCameraObject.AddComponent<Camera>();
+
+        // Configure the mini-map camera
+        miniMapCamera.orthographic = true;
+        miniMapCamera.orthographicSize = Mathf.Max(maxX - minX, maxZ - minZ) / 2f;
+        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 100, (minZ + maxZ) / 2);
+        miniMapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);
+        miniMapCamera.cullingMask = LayerMask.GetMask("Default");
+
+        // Set the mini-map camera to render to a render texture
+        miniMapCamera.targetTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32);
+        miniMapCamera.gameObject.SetActive(false);
+
+        // Create a UI element to display the mini-map
+        miniMapUI = new GameObject("MiniMapUI");
+        Canvas canvas = miniMapUI.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+        GameObject rawImageObject = new GameObject("MiniMapImage");
+        rawImageObject.transform.parent = miniMapUI.transform;
+        UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
+        rawImage.texture = miniMapCamera.targetTexture;
+        RectTransform rectTransform = rawImage.GetComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0.75f, 0.75f); // Adjust the position on the screen
+        rectTransform.anchorMax = new Vector2(1f, 1f);
+        rectTransform.sizeDelta = new Vector2(256, 256); // Adjust the size of the mini-map
+        miniMapUI.SetActive(false); // Start with the mini-map hidden
+    }
+
+    void ToggleMiniMap()
+    {
+        isMiniMapVisible = !isMiniMapVisible;
+        miniMapCamera.gameObject.SetActive(isMiniMapVisible);
+        miniMapUI.SetActive(isMiniMapVisible);
     }
 }
