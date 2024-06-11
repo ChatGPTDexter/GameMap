@@ -14,6 +14,30 @@ public class CharacterAI : MonoBehaviour
     private const string OpenAIAPIKey = "your-openai-api-key"; // Replace with your OpenAI API key
     private const string OpenAIEndpoint = "https://api.openai.com/v1/completions"; // GPT-3/4 Endpoint
 
+    void Start()
+    {
+        // Check and assign UI elements if they are not assigned in the Inspector
+        if (userInputField == null)
+        {
+            userInputField = FindObjectOfType<TMP_InputField>();
+            if (userInputField == null)
+            {
+                Debug.LogError("User Input Field not found. Please ensure it's present in the scene.");
+                return;
+            }
+        }
+
+        if (responseText == null)
+        {
+            responseText = FindObjectOfType<TMP_Text>();
+            if (responseText == null)
+            {
+                Debug.LogError("Response Text not found. Please ensure it's present in the scene.");
+                return;
+            }
+        }
+    }
+
     // Method to initialize the character with its specific data
     public void Initialize(string label, string script)
     {
@@ -25,7 +49,11 @@ public class CharacterAI : MonoBehaviour
     public void OnAskQuestion()
     {
         string userQuestion = userInputField.text;
-        if (string.IsNullOrEmpty(userQuestion)) return;
+        if (string.IsNullOrEmpty(userQuestion))
+        {
+            Debug.LogWarning("User question is empty.");
+            return;
+        }
 
         string prompt = $"Topic: {topicLabel}\nTranscript: {transcript}\n\nUser: {userQuestion}\nBot:";
 
@@ -37,7 +65,7 @@ public class CharacterAI : MonoBehaviour
     {
         var requestData = new
         {
-            model = "gpt-4o", // Replace with the model you're using
+            model = "text-davinci-003", // Replace with the model you're using
             prompt = prompt,
             max_tokens = 150,
             temperature = 0.7,
