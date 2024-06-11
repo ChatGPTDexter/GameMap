@@ -62,12 +62,11 @@ class ClusterCreator:
             return
 
         label_list = df['Title'].tolist()
-        view_count_list = df['ViewCount'].tolist()
         if len(label_list) != len(embeddings):
             print(f"Error: Label list length ({len(label_list)}) does not match embeddings length ({len(embeddings)}).")
             return
 
-        self.workbench = pd.DataFrame({'Label': label_list, 'embedding': list(embeddings), 'ViewCount': view_count_list})
+        self.workbench = pd.DataFrame({'Label': label_list, 'embedding': list(embeddings)})
 
     def make_clusters(self):
         if self.workbench is None or self.workbench.empty:
@@ -122,7 +121,7 @@ class ClusterCreator:
         self.clusters.set_index('id', inplace=True)
         self.workbench['cluster'] = self.workbench['Label'].map(self.skill_cluster_mapping)
 
-        umap_model = UMAP(n_neighbors=50, min_dist=0.5, n_components=2, metric='cosine')
+        umap_model = UMAP(n_neighbors=50, min_dist=0.5, n_components=3, metric='cosine')
         embedding_array = np.stack(self.workbench['embedding'])
         umap_coords = umap_model.fit_transform(embedding_array) * 750
         self.umap_coords = pd.Series(umap_coords.tolist())
@@ -138,7 +137,7 @@ class ClusterCreator:
         spread_factor = 200  # You can adjust this factor as needed for more spacing
         for i, coords in enumerate(self.umap_coords):
             # Add a fixed offset to spread out the points
-            self.umap_coords[i] = (coords[0] + (i % 10) * spread_factor, coords[1] + (i // 10) * spread_factor)
+            self.umap_coords[i] = (coords[0] + (i % 10) * spread_factor, coords[1] + (i // 10) * spread_factor, coords[2])
 
     def merge_cluster(self, parent_id, child_id):
         child_nodes = self.cluster_nodes.pop(child_id, [])
@@ -183,24 +182,22 @@ class ClusterCreator:
 
     def save_umap_coords_to_csv(self, output_file):
         umap_coords_df = self.workbench[['Label', 'umap_coords']].copy()
-        umap_coords_df[['x', 'y']] = pd.DataFrame(umap_coords_df['umap_coords'].tolist(), index=umap_coords_df.index)
+        umap_coords_df[['x', 'y', 'z']] = pd.DataFrame(umap_coords_df['umap_coords'].tolist(), index=umap_coords_df.index)
         umap_coords_df.drop('umap_coords', axis=1, inplace=True)
 
-        # Clean and convert view counts to numeric values
-        self.workbench['ViewCount'] = self.workbench['ViewCount'].str.replace(',', '').str.replace('"', '')
-        view_counts = pd.to_numeric(self.workbench['ViewCount'], errors='coerce')
-        
-        min_view_count = view_counts.min()
-        max_view_count = view_counts.max()
-        
-        if min_view_count is None or max_view_count is None or min_view_count == max_view_count:
-            print("Error: Invalid view count data for normalization.")
+        # Normalize z coordinate between 5 and 45
+        z_coords = umap_coords_df['z']
+        z_min = z_coords.min()
+        z_max = z_coords.max()
+
+        if z_min is None or z_max is None or z_min == z_max:
+            print("Error: Invalid z coordinate data for normalization.")
             return
 
-        def normalize_view_count(view_count, min_view, max_view):
-            return 5 + (view_count - min_view) * (40 / (max_view - min_view))
-        
-        umap_coords_df['z'] = [normalize_view_count(vc, min_view_count, max_view_count) for vc in view_counts]
+        def normalize_z(z, z_min, z_max):
+            return 5 + (z - z_min) * (40 / (z_max - z_min))
+
+        umap_coords_df['z'] = [normalize_z(z, z_min, z_max) for z in z_coords]
 
         print(umap_coords_df.head())  # Debugging line to print the first few rows of the DataFrame
         umap_coords_df.to_csv(output_file, index=False)
