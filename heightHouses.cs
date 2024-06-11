@@ -109,9 +109,9 @@ public class MapGenerator : MonoBehaviour
     void AdjustTerrainSize()
     {
         TerrainData terrainData = terrain.terrainData;
-        Vector3 terrainSize = new Vector3(maxX - minX + 100, terrainData.size.y, maxZ - minZ + 100);
+        Vector3 terrainSize = new Vector3(maxX - minX + 200, terrainData.size.y, maxZ - minZ + 200);
         terrainData.size = terrainSize;
-        terrain.transform.position = new Vector3(minX - 50, 0, minZ - 50);
+        terrain.transform.position = new Vector3(minX - 100, 0, minZ - 100);
         Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
@@ -235,6 +235,7 @@ public class MapGenerator : MonoBehaviour
                     GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
                     Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
+                    Debug.Log($"Spawning house at y={terrainHeight + (houseHeight / 2)}");
                 }
                 catch (Exception ex)
                 {
@@ -337,7 +338,7 @@ public class MapGenerator : MonoBehaviour
         // Calculate maximum elevation based on elevation factor
         float maxElevation = Mathf.Min(45f, position.y * elevationFactor) / terrainData.size.y;
         float maxIncr = 0;
-        float mindist = 300;
+        float mindist = 75;
         // Calculate falloff based on distance from the center
         for (int x = 0; x < heights.GetLength(0); x++)
         {
@@ -362,6 +363,8 @@ public class MapGenerator : MonoBehaviour
                 heights[x, z] += heightIncrement;
             }
         }
+
+        Debug.Log($"This is the maxIncr: {maxIncr} with this y: {position.y}");
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
         Debug.Log("Terrain elevation applied");
@@ -408,7 +411,7 @@ public class MapGenerator : MonoBehaviour
     float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
         // Adjust the parameters as needed for your desired falloff curve
-        float maxDistance = 30f; // Radius
+        float maxDistance = 25f; // Radius
         float plateauThreshold = 1f; // Threshold for plateau effect
         float plateauStrength = 0.5f; // Strength of plateau effect
         float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
@@ -417,7 +420,7 @@ public class MapGenerator : MonoBehaviour
 
         // Calculate height increment with maximum limit at the center and plateau effect near the top
         float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
-        if (radius < 75)
+        if (radius < 25)
         {
             falloff = Mathf.Clamp01(1 - distance / radius);
             heightIncrement = falloff * maxElevation;
@@ -697,7 +700,7 @@ public class MapGenerator : MonoBehaviour
         }
         else
         {
-            return 30;
+            return 25;
         }
     }
 
