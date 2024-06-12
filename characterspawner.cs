@@ -3,12 +3,15 @@ using System.Globalization;
 using System.IO;
 using UnityEngine;
 using System.Linq;
+using TMPro; // For TextMeshPro
+using UnityEngine.UI; // For UI elements
 
 public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab; // Assign your character prefab here
     [SerializeField] private string coordinatesCsvFileName = "coordinates.csv"; // Coordinates CSV file
     [SerializeField] private string transcriptsCsvFileName = "transcripts.csv"; // Transcripts CSV file
+    [SerializeField] private GameObject uiCanvasPrefab; // Assign your UI Canvas prefab here
 
     private class TopicInfo
     {
@@ -81,8 +84,8 @@ public class CharacterSpawner : MonoBehaviour
                         float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
                         float.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
                     {
-                        // Create a new Vector3 and add to the list
-                        Vector3 position = new Vector3(x, y, z);
+                        // Swap y and z coordinates to match Unity's coordinate system
+                        Vector3 position = new Vector3(x, z, y); // Swapping y and z
                         string label = values[0].Trim('"');
                         coordinates.Add((label, position));
                         Debug.Log($"Parsed coordinate: {label} at position: {position}");
@@ -140,7 +143,12 @@ public class CharacterSpawner : MonoBehaviour
         foreach (var topic in topics)
         {
             Debug.Log($"Spawning character for topic: {topic.Label} at position: {topic.Position}");
-            GameObject character = Instantiate(characterPrefab, topic.Position, Quaternion.identity);
+
+            // Set the rotation to 180 degrees on the Y-axis
+            Quaternion rotation = Quaternion.Euler(0, 180, 0);
+
+            // Instantiate the character at the given position and with the rotation
+            GameObject character = Instantiate(characterPrefab, topic.Position, rotation);
 
             // Set the name of the instantiated character to the topic label
             character.name = topic.Label;
@@ -149,6 +157,32 @@ public class CharacterSpawner : MonoBehaviour
             if (characterAI != null)
             {
                 characterAI.Initialize(topic.Label, topic.Transcript);
+
+                // Instantiate the UI Canvas next to the character
+                GameObject uiCanvas = Instantiate(uiCanvasPrefab, character.transform.position + new Vector3(0, 2, 0), Quaternion.identity); // Adjust position as needed
+                uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f); // Adjust scale as needed
+                
+                // Rotate the Canvas by 180 degrees around the Y-axis
+                uiCanvas.transform.Rotate(0, 180, 0);
+
+                uiCanvas.transform.SetParent(character.transform); // Make Canvas a child of the character for easy management
+
+                // Assign the UI elements to the CharacterAI script
+                characterAI.userInputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
+                characterAI.responseText = uiCanvas.GetComponentInChildren<TMP_Text>();
+                characterAI.submitButton = uiCanvas.GetComponentInChildren<Button>();
+
+                // Log warnings if any UI elements are missing
+                if (characterAI.userInputField == null)
+                    Debug.LogWarning($"Character {topic.Label} does not have a TMP_InputField component.");
+                if (characterAI.responseText == null)
+                    Debug.LogWarning($"Character {topic.Label} does not have a TMP_Text component.");
+                if (characterAI.submitButton == null)
+                    Debug.LogWarning($"Character {topic.Label} does not have a Button component.");
+            }
+            else
+            {
+                Debug.LogWarning($"Character {topic.Label} does not have a CharacterAI component.");
             }
         }
     }
