@@ -67,6 +67,7 @@ public class MapGenerator : MonoBehaviour
         RemoveTreesBelowHeight(3f);
         PlaceWater(); // Add water layer
         SetupMiniMap(); // Setup the mini-map camera and UI
+        InstantiateHouses(); // Instantiate and position the houses after terrain generation
     }
 
     void CalculateTerrainSize()
@@ -225,37 +226,6 @@ public class MapGenerator : MonoBehaviour
                 {
                     // Adjust terrain and get the corrected height
                     ElevateTerrainAround(position);
-                    float terrainHeight = terrain.SampleHeight(position);
-
-                    // Adjust the y-coordinate for houses at y value of 5
-                    if (Mathf.Approximately(position.y, 5f))
-                    {
-                        position.y += 1f; // Increase y-coordinate by 1
-                    }
-                    // Instantiate the house prefab at the adjusted height
-                    GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                    float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
-                    GameObject house = Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
-
-                    // Get house dimensions using MeshFilter bounds for more accuracy
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        // Instantiate the cube underneath the house
-                        Vector3 cubePosition = new Vector3(position.x, terrainHeight - (houseSize.y / 1.5f), position.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={terrainHeight} and cube at y={terrainHeight - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -762,5 +732,48 @@ public class MapGenerator : MonoBehaviour
         isMiniMapVisible = !isMiniMapVisible;
         miniMapCamera.gameObject.SetActive(isMiniMapVisible);
         miniMapUI.SetActive(isMiniMapVisible);
+    }
+
+    void InstantiateHouses()
+    {
+        foreach (var houseEntry in housePositions)
+        {
+            Vector3 position = houseEntry.Value;
+
+            try
+            {
+                // Get the corrected height for the house position
+                float terrainHeight = terrain.SampleHeight(position);
+
+                // Instantiate the house prefab at the adjusted height
+                GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+                float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+                GameObject house = Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
+
+                // Get house dimensions using MeshFilter bounds for more accuracy
+                MeshFilter meshFilter = house.GetComponent<MeshFilter>();
+                if (meshFilter != null)
+                {
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    // Instantiate the cube underneath the house
+                    Vector3 cubePosition = new Vector3(position.x, terrainHeight - (houseSize.y / 1.5f), position.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
+                    Debug.Log($"Spawning house at y={terrainHeight} and cube at y={terrainHeight - (houseSize.y / 2)} with scale {houseSize}");
+                }
+                else
+                {
+                    Debug.LogError("House prefab does not have a MeshFilter component.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error positioning house at {position}: {ex.Message}");
+            }
+        }
     }
 }
