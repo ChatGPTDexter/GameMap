@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
+using TMPro; // Add this to use TextMeshPro
 
 public class MapGenerator : MonoBehaviour
 {
@@ -25,6 +26,7 @@ public class MapGenerator : MonoBehaviour
     public float checkRadius = 10f; // Radius to check for nearby houses
 
     public GameObject cubePrefab; // Assign the cube prefab here
+    public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
@@ -725,6 +727,12 @@ public class MapGenerator : MonoBehaviour
         rectTransform.anchorMax = new Vector2(1f, 1f);
         rectTransform.sizeDelta = new Vector2(256, 256); // Adjust the size of the mini-map
         miniMapUI.SetActive(false); // Start with the mini-map hidden
+
+        // Create UI elements for house labels
+        foreach (var houseEntry in housePositions)
+        {
+            CreateHouseLabel(houseEntry.Key, houseEntry.Value);
+        }
     }
 
     void ToggleMiniMap()
@@ -732,6 +740,42 @@ public class MapGenerator : MonoBehaviour
         isMiniMapVisible = !isMiniMapVisible;
         miniMapCamera.gameObject.SetActive(isMiniMapVisible);
         miniMapUI.SetActive(isMiniMapVisible);
+    }
+
+    void CreateHouseLabel(string label, Vector3 position)
+    {
+        if (houseLabelPrefab == null)
+        {
+            Debug.LogError("House label prefab not assigned.");
+            return;
+        }
+
+        // Create a UI element for the house label
+        GameObject houseLabel = Instantiate(houseLabelPrefab, miniMapUI.transform);
+        TMP_Text labelText = houseLabel.GetComponent<TMP_Text>();
+        if (labelText == null)
+        {
+            Debug.LogError("House label prefab does not have a TMP_Text component.");
+            return;
+        }
+
+        labelText.text = label;
+
+        // Position the label on the mini-map
+        RectTransform labelRectTransform = houseLabel.GetComponent<RectTransform>();
+        Vector2 miniMapPosition = WorldToMiniMapPosition(position);
+        labelRectTransform.anchoredPosition = miniMapPosition;
+    }
+
+    Vector2 WorldToMiniMapPosition(Vector3 worldPosition)
+    {
+        // Convert world position to mini-map position
+        float mapWidth = maxX - minX;
+        float mapHeight = maxZ - minZ;
+        float x = (worldPosition.x - minX) / mapWidth;
+        float z = (worldPosition.z - minZ) / mapHeight;
+
+        return new Vector2(x * 256, z * 256); // Adjust to the mini-map UI size
     }
 
     void InstantiateHouses()
