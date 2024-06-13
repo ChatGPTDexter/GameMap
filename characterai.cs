@@ -49,7 +49,7 @@ public class CharacterAI : MonoBehaviour
             model = "gpt-3.5-turbo", // Replace with the correct model
             messages = new[]
             {
-                new { role = "system", content = $"You are a helpful assistant for the topic: {topicLabel}. Use the following transcript to answer questions: {transcript}" },
+                new { role = "system", content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions lessons challenges etc. based on portraying the valid information from this video and based on valid user input." },
                 new { role = "user", content = prompt }
             },
             max_tokens = 150,
