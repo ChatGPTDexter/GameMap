@@ -2,16 +2,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using UnityEngine;
-using System.Linq;
-using TMPro; // For TextMeshPro
-using UnityEngine.UI; // For UI elements
+using System.Linq; // Needed for LINQ operations
+using TMPro; // For TextMeshPro components
+using UnityEngine.UI; // For Button and other UI components
 
 public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab; // Assign your character prefab here
+    [SerializeField] private GameObject uiCanvasPrefab; // Assign your UI Canvas prefab here
     [SerializeField] private string coordinatesCsvFileName = "coordinates.csv"; // Coordinates CSV file
     [SerializeField] private string transcriptsCsvFileName = "transcripts.csv"; // Transcripts CSV file
-    [SerializeField] private GameObject uiCanvasPrefab; // Assign your UI Canvas prefab here
 
     private class TopicInfo
     {
@@ -27,7 +27,14 @@ public class CharacterSpawner : MonoBehaviour
 
         List<TopicInfo> topics = MergeDataFromCSVFiles(coordinatesFilePath, transcriptsFilePath);
         Debug.Log("Number of topics combined from CSVs: " + topics.Count);
-        SpawnCharacters(topics);
+        if (topics.Count > 0)
+        {
+            SpawnCharacters(topics);
+        }
+        else
+        {
+            Debug.LogWarning("No topics found to spawn characters.");
+        }
     }
 
     private List<TopicInfo> MergeDataFromCSVFiles(string coordinatesFilePath, string transcriptsFilePath)
@@ -47,7 +54,7 @@ public class CharacterSpawner : MonoBehaviour
             {
                 topics.Add(new TopicInfo
                 {
-                    Position = coordinate.Position,
+                    Position = new Vector3(coordinate.Position.x, coordinate.Position.z, coordinate.Position.y), // Swapping y and z
                     Label = coordinate.Label,
                     Transcript = transcript
                 });
@@ -71,6 +78,12 @@ public class CharacterSpawner : MonoBehaviour
             var lines = File.ReadAllLines(filePath);
             Debug.Log("Number of lines read from coordinates CSV: " + lines.Length);
 
+            if (lines.Length < 2)
+            {
+                Debug.LogWarning("The coordinates CSV file is empty or only contains a header.");
+                return coordinates;
+            }
+
             // Skip the header line and parse the rest
             foreach (var line in lines.Skip(1))
             {
@@ -84,8 +97,8 @@ public class CharacterSpawner : MonoBehaviour
                         float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
                         float.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
                     {
-                        // Swap y and z coordinates to match Unity's coordinate system
-                        Vector3 position = new Vector3(x, z, y); // Swapping y and z
+                        // Create a new Vector3 and add to the list
+                        Vector3 position = new Vector3(x, y, z);
                         string label = values[0].Trim('"');
                         coordinates.Add((label, position));
                         Debug.Log($"Parsed coordinate: {label} at position: {position}");
@@ -94,6 +107,10 @@ public class CharacterSpawner : MonoBehaviour
                     {
                         Debug.LogWarning($"Failed to parse coordinates for line: {line}");
                     }
+                }
+                else
+                {
+                    Debug.LogWarning($"Insufficient data in line: {line}");
                 }
             }
         }
@@ -128,6 +145,10 @@ public class CharacterSpawner : MonoBehaviour
                     transcripts[label] = transcript;
                     Debug.Log($"Parsed transcript for label: {label}");
                 }
+                else
+                {
+                    Debug.LogWarning($"Insufficient data in line: {line}");
+                }
             }
         }
         catch (System.Exception ex)
@@ -143,49 +164,91 @@ public class CharacterSpawner : MonoBehaviour
         foreach (var topic in topics)
         {
             Debug.Log($"Spawning character for topic: {topic.Label} at position: {topic.Position}");
+            GameObject character = Instantiate(characterPrefab, topic.Position, Quaternion.identity);
 
-            // Set the rotation to 180 degrees on the Y-axis
-            Quaternion rotation = Quaternion.Euler(0, 180, 0);
-
-            // Instantiate the character at the given position and with the rotation
-            GameObject character = Instantiate(characterPrefab, topic.Position, rotation);
+            // Verify if the character prefab has the CharacterAI component
+            var characterAI = character.GetComponent<CharacterAI>();
+            if (characterAI != null)
+            {
+                Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
+                characterAI.Initialize(topic.Label, topic.Transcript);
+            }
+            else
+            {
+                Debug.LogError($"Character {topic.Label} does not have a CharacterAI component attached.");
+            }
 
             // Set the name of the instantiated character to the topic label
             character.name = topic.Label;
 
-            var characterAI = character.GetComponent<CharacterAI>();
-            if (characterAI != null)
-            {
-                characterAI.Initialize(topic.Label, topic.Transcript);
+            // Instantiate the UI Canvas next to the character
+            Vector3 uiPosition = character.transform.position + new Vector3(2, 0, 0); // Adjust UI position relative to character
+            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.Euler(0, 180, 0), character.transform);
 
-                // Instantiate the UI Canvas next to the character
-                GameObject uiCanvas = Instantiate(uiCanvasPrefab, character.transform.position + new Vector3(0, 2, 0), Quaternion.identity); // Adjust position as needed
-                uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f); // Adjust scale as needed
-                
-                // Rotate the Canvas by 180 degrees around the Y-axis
-                uiCanvas.transform.Rotate(0, 180, 0);
+            // Scale down the UI Canvas to fit nicely
+            uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
 
-                uiCanvas.transform.SetParent(character.transform); // Make Canvas a child of the character for easy management
-
-                // Assign the UI elements to the CharacterAI script
-                characterAI.userInputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
-                characterAI.responseText = uiCanvas.GetComponentInChildren<TMP_Text>();
-                characterAI.submitButton = uiCanvas.GetComponentInChildren<Button>();
-
-                // Log warnings if any UI elements are missing
-                if (characterAI.userInputField == null)
-                    Debug.LogWarning($"Character {topic.Label} does not have a TMP_InputField component.");
-                if (characterAI.responseText == null)
-                    Debug.LogWarning($"Character {topic.Label} does not have a TMP_Text component.");
-                if (characterAI.submitButton == null)
-                    Debug.LogWarning($"Character {topic.Label} does not have a Button component.");
-            }
-            else
-            {
-                Debug.LogWarning($"Character {topic.Label} does not have a CharacterAI component.");
-            }
+            // Assign the UI elements to the CharacterAI script
+            AssignUIElements(characterAI, uiCanvas);
         }
     }
+
+private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas)
+{
+    if (characterAI == null || uiCanvas == null)
+    {
+        Debug.LogError("CharacterAI or uiCanvas is null.");
+        return;
+    }
+
+    // Assign the input field for user input
+    TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
+    
+    // Find the response text which is a TMP_Text that is not named "Placeholder"
+    TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
+                                     .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
+
+    // Assign the button used to submit the question
+    Button submitButton = uiCanvas.GetComponentInChildren<Button>();
+
+    if (inputField != null)
+    {
+        characterAI.userInputField = inputField;
+        Debug.Log("Input field assigned.");
+    }
+    else
+    {
+        Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
+    }
+
+    if (responseText != null)
+    {
+        characterAI.responseText = responseText;
+
+        // Adjust the properties of the response text to scale it down
+        responseText.fontSize = 8.0f; // Set a smaller font size
+        responseText.enableAutoSizing = false; // Disable auto-sizing if specific size control is needed
+        responseText.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
+        Debug.Log("Response text assigned and scaled down.");
+    }
+    else
+    {
+        Debug.LogWarning("No TMP_Text found in the UI Canvas for response.");
+    }
+
+    if (submitButton != null)
+    {
+        characterAI.submitButton = submitButton;
+        submitButton.onClick.AddListener(characterAI.OnAskQuestion);
+        Debug.Log("Submit button assigned and listener added.");
+    }
+    else
+    {
+        Debug.LogWarning("No Button found in the UI Canvas.");
+    }
+}
+
+
 
     // Utility method to correctly split a CSV line taking care of quoted strings
     private string[] SplitCsvLine(string line)
