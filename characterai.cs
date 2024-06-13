@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using TMPro; // For TextMeshPro UI elements
+using UnityEngine.UI; // For UI Button
+using Newtonsoft.Json.Linq; // For JSON parsing
 
 public class CharacterAI : MonoBehaviour
 {
@@ -10,50 +12,29 @@ public class CharacterAI : MonoBehaviour
     public string transcript; // The context for AI interactions
     public TMP_InputField userInputField; // The input field for user questions
     public TMP_Text responseText; // The text field for AI responses
+    public Button submitButton; // The button to submit the question
 
-    private const string OpenAIAPIKey = "your-openai-api-key"; // Replace with your OpenAI API key
-    private const string OpenAIEndpoint = "https://api.openai.com/v1/completions"; // GPT-3/4 Endpoint
-
-    void Start()
-    {
-        // Check and assign UI elements if they are not assigned in the Inspector
-        if (userInputField == null)
-        {
-            userInputField = FindObjectOfType<TMP_InputField>();
-            if (userInputField == null)
-            {
-                Debug.LogError("User Input Field not found. Please ensure it's present in the scene.");
-                return;
-            }
-        }
-
-        if (responseText == null)
-        {
-            responseText = FindObjectOfType<TMP_Text>();
-            if (responseText == null)
-            {
-                Debug.LogError("Response Text not found. Please ensure it's present in the scene.");
-                return;
-            }
-        }
-    }
+    private const string OpenAIAPIKey = "Openai-key"; // Replace with your OpenAI API key
+    private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions"; // GPT-3.5-turbo/4 Endpoint
 
     // Method to initialize the character with its specific data
     public void Initialize(string label, string script)
     {
         topicLabel = label;
         transcript = script;
+
+        // Attach the button click event to OnAskQuestion method
+        if (submitButton != null)
+        {
+            submitButton.onClick.AddListener(OnAskQuestion);
+        }
     }
 
     // Method called when the user submits a question
     public void OnAskQuestion()
     {
         string userQuestion = userInputField.text;
-        if (string.IsNullOrEmpty(userQuestion))
-        {
-            Debug.LogWarning("User question is empty.");
-            return;
-        }
+        if (string.IsNullOrEmpty(userQuestion)) return;
 
         string prompt = $"Topic: {topicLabel}\nTranscript: {transcript}\n\nUser: {userQuestion}\nBot:";
 
@@ -65,14 +46,17 @@ public class CharacterAI : MonoBehaviour
     {
         var requestData = new
         {
-            model = "text-davinci-003", // Replace with the model you're using
-            prompt = prompt,
+            model = "gpt-3.5-turbo", // Replace with the correct model
+            messages = new[]
+            {
+                new { role = "system", content = $"You are a helpful assistant for the topic: {topicLabel}. Use the following transcript to answer questions: {transcript}" },
+                new { role = "user", content = prompt }
+            },
             max_tokens = 150,
-            temperature = 0.7,
-            stop = new[] { "\n", "User:" } // Stop generation after the bot response
+            temperature = 0.7
         };
 
-        string jsonData = JsonUtility.ToJson(requestData);
+        string jsonData = JObject.FromObject(requestData).ToString();
 
         using (UnityWebRequest request = new UnityWebRequest(OpenAIEndpoint, "POST"))
         {
@@ -86,19 +70,31 @@ public class CharacterAI : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError)
             {
-                Debug.LogError($"Error: {request.error}");
-                responseText.text = "There was an error processing your request.";
+                Debug.LogError($"Error: {request.error}\nResponse: {request.downloadHandler.text}");
+                responseText.text = "There was an error processing your request. Please check the console for details.";
             }
             else
             {
-                var jsonResponse = JsonUtility.FromJson<OpenAIResponse>(request.downloadHandler.text);
-                responseText.text = jsonResponse.choices[0].text.Trim();
+                Debug.Log($"Response: {request.downloadHandler.text}");
+                var jsonResponse = JObject.Parse(request.downloadHandler.text);
+                var choices = jsonResponse["choices"];
+                if (choices != null && choices.HasValues)
+                {
+                    var firstChoice = choices[0];
+                    var messageContent = firstChoice["message"]["content"].ToString().Trim();
+                    responseText.text = messageContent; // Update the TMP_Text component with the response
+                    Debug.Log($"Setting response text to: {messageContent}");
+                }
+                else
+                {
+                    responseText.text = "No response from AI.";
+                }
             }
         }
     }
 }
 
-// Helper class to parse OpenAI response
+// Helper classes to parse OpenAI response
 [System.Serializable]
 public class OpenAIResponse
 {
@@ -108,5 +104,11 @@ public class OpenAIResponse
 [System.Serializable]
 public class Choice
 {
-    public string text;
+    public Message message;
+}
+
+[System.Serializable]
+public class Message
+{
+    public string content;
 }
