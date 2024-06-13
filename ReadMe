@@ -4,3 +4,12 @@ download:
 3. Low poly terrain
 4. Low poly street pack
 
+Add Height houses to empty game object,
+assign prefabs in inspector window,
+great terrain game object,
+under the terrain word in inspector window hit the second button from the left, has paintbrush and mountain,
+click on paint holes and toggle to paint texture,
+hit edit terrain layers, add layer, select texture
+assign terrain in inspector window,
+assign both the coord CSV and MST CSV in inspector window,
+run code.
