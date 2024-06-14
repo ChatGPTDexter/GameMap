@@ -3,7 +3,7 @@ download:
 2. Aquas lite
 3. Low poly terrain
 4. Low poly street pack
-
+5. mini first person controller
 Add Height houses to empty game object,
 assign prefabs in inspector window,
 great terrain game object,
@@ -12,4 +12,5 @@ click on paint holes and toggle to paint texture,
 hit edit terrain layers, add layer, select texture
 assign terrain in inspector window,
 assign both the coord CSV and MST CSV in inspector window,
-run code.
+run code. drag controller into game.
+update first person controller script.
