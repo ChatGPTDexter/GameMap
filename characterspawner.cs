@@ -166,6 +166,8 @@ public class CharacterSpawner : MonoBehaviour
             Debug.Log($"Spawning character for topic: {topic.Label} at position: {topic.Position}");
 
             Vector3 adjustedPosition = AdjustPositionToTerrain(topic.Position);
+
+            Debug.Log($"This is adjusted position {adjustedPosition}!");
             GameObject character = Instantiate(characterPrefab, adjustedPosition, Quaternion.identity);
 
             var characterAI = character.GetComponent<CharacterAI>();
@@ -203,11 +205,14 @@ public class CharacterSpawner : MonoBehaviour
             return position;
         }
 
-        float terrainHeight = terrain.SampleHeight(position) + terrain.transform.position.y;
         Vector3 houseDimensions = GetHouseDimensions();
 
         float zOffset = houseDimensions.z / 2 + 1f;
 
+        // Get the terrain height at the original position
+        float terrainHeight = terrain.SampleHeight(new Vector3(position.x, 0, position.z));
+
+        // Adjust the position by adding the zOffset to the z-coordinate
         return new Vector3(
             position.x,
             terrainHeight,
