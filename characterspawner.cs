@@ -21,6 +21,8 @@ public class CharacterSpawner : MonoBehaviour
         public string Transcript { get; set; }
     }
 
+    private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
+
     void Start()
     {
         if (coordinatesCsvFile == null || transcriptsCsvFile == null)
@@ -171,6 +173,7 @@ public class CharacterSpawner : MonoBehaviour
             {
                 Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
                 characterAI.Initialize(topic.Label, topic.Transcript);
+                spawnedCharacters.Add(characterAI);
             }
             else
             {
@@ -182,7 +185,6 @@ public class CharacterSpawner : MonoBehaviour
             Vector3 uiPosition = character.transform.position + new Vector3(2, 0, 0);
             GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.Euler(0, 180, 0), character.transform);
 
-            // Set the canvas to world space and parent it to the character
             Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
             canvasComponent.renderMode = RenderMode.WorldSpace;
 
@@ -204,7 +206,6 @@ public class CharacterSpawner : MonoBehaviour
         float terrainHeight = terrain.SampleHeight(position) + terrain.transform.position.y;
         Vector3 houseDimensions = GetHouseDimensions();
 
-        // Calculate the offset to move the character outside the house in the z direction
         float zOffset = houseDimensions.z / 2 + 1f;
 
         return new Vector3(
@@ -222,7 +223,6 @@ public class CharacterSpawner : MonoBehaviour
             return Vector3.zero;
         }
 
-        // Assuming we use the first house prefab for dimensions
         GameObject housePrefab = mapGenerator.housePrefabs[0];
         MeshFilter meshFilter = housePrefab.GetComponentInChildren<MeshFilter>();
         if (meshFilter == null)
@@ -266,7 +266,8 @@ public class CharacterSpawner : MonoBehaviour
         if (responseText != null)
         {
             characterAI.responseText = responseText;
-            responseText.fontSize = 8.0f;
+            responseText.fontSize = 20.0f;
+            responseText.color = Color.red;
             responseText.enableAutoSizing = false;
             responseText.alignment = TextAlignmentOptions.TopLeft;
             Debug.Log("Response text assigned and scaled down.");
@@ -315,5 +316,23 @@ public class CharacterSpawner : MonoBehaviour
         values.Add(value);
 
         return values.ToArray();
+    }
+
+    public CharacterAI GetClosestCharacter(Vector3 position, float radius)
+    {
+        CharacterAI closestCharacter = null;
+        float closestDistance = radius;
+
+        foreach (var character in spawnedCharacters)
+        {
+            float distance = Vector3.Distance(position, character.transform.position);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestCharacter = character;
+            }
+        }
+
+        return closestCharacter;
     }
 }
