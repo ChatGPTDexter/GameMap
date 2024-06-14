@@ -2,35 +2,54 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
-using TMPro; // For TextMeshPro UI elements
-using UnityEngine.UI; // For UI Button
-using Newtonsoft.Json.Linq; // For JSON parsing
+using TMPro;
+using UnityEngine.UI;
 
 public class CharacterAI : MonoBehaviour
 {
     public string topicLabel;
-    public string transcript; // The context for AI interactions
-    public TMP_InputField userInputField; // The input field for user questions
-    public TMP_Text responseText; // The text field for AI responses
-    public Button submitButton; // The button to submit the question
+    public string transcript;
+    public TMP_InputField userInputField;
+    public TMP_Text responseText;
+    public Button submitButton;
 
-    private const string OpenAIAPIKey = "Openai-key"; // Replace with your OpenAI API key
-    private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions"; // GPT-3.5-turbo/4 Endpoint
+    private const string OpenAIAPIKey = "OpenAi Key";
+    private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
+    private FirstPersonMovement firstPersonMovement;
 
-    // Method to initialize the character with its specific data
+    void Start()
+    {
+        firstPersonMovement = FindObjectOfType<FirstPersonMovement>();
+        userInputField.onEndEdit.AddListener(OnSubmitQuestion);
+    }
+
     public void Initialize(string label, string script)
     {
         topicLabel = label;
         transcript = script;
+    }
 
-        // Attach the button click event to OnAskQuestion method
-        if (submitButton != null)
+    public void EnableInteraction()
+    {
+        userInputField.gameObject.SetActive(true);
+        userInputField.Select();
+        userInputField.ActivateInputField();
+    }
+
+    public void DisableInteraction()
+    {
+        userInputField.gameObject.SetActive(false);
+    }
+
+    private void OnSubmitQuestion(string userQuestion)
+    {
+        if (Input.GetKeyDown(KeyCode.Return) && !string.IsNullOrEmpty(userQuestion))
         {
-            submitButton.onClick.AddListener(OnAskQuestion);
+            string prompt = $"Topic: {topicLabel}\nTranscript: {transcript}\n\nUser: {userQuestion}\nBot:";
+            StartCoroutine(GetResponseFromAI(prompt));
         }
     }
 
-    // Method called when the user submits a question
     public void OnAskQuestion()
     {
         string userQuestion = userInputField.text;
@@ -41,22 +60,21 @@ public class CharacterAI : MonoBehaviour
         StartCoroutine(GetResponseFromAI(prompt));
     }
 
-    // Coroutine to call the OpenAI API and get the response
     private IEnumerator GetResponseFromAI(string prompt)
     {
-        var requestData = new
+        var requestData = new OpenAIRequest
         {
-            model = "gpt-3.5-turbo", // Replace with the correct model
+            model = "gpt-3.5-turbo",
             messages = new[]
             {
-                new { role = "system", content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions lessons challenges etc. based on portraying the valid information from this video and based on valid user input." },
-                new { role = "user", content = prompt }
+                new OpenAIMessage { role = "system", content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions lessons challenges etc. based on portraying the valid information from this video and based on valid user input." },
+                new OpenAIMessage { role = "user", content = prompt }
             },
             max_tokens = 150,
-            temperature = 0.7
+            temperature = 0.7f
         };
 
-        string jsonData = JObject.FromObject(requestData).ToString();
+        string jsonData = JsonUtility.ToJson(requestData);
 
         using (UnityWebRequest request = new UnityWebRequest(OpenAIEndpoint, "POST"))
         {
@@ -76,13 +94,12 @@ public class CharacterAI : MonoBehaviour
             else
             {
                 Debug.Log($"Response: {request.downloadHandler.text}");
-                var jsonResponse = JObject.Parse(request.downloadHandler.text);
-                var choices = jsonResponse["choices"];
-                if (choices != null && choices.HasValues)
+                var jsonResponse = JsonUtility.FromJson<OpenAIResponse>(request.downloadHandler.text);
+                if (jsonResponse.choices != null && jsonResponse.choices.Count > 0)
                 {
-                    var firstChoice = choices[0];
-                    var messageContent = firstChoice["message"]["content"].ToString().Trim();
-                    responseText.text = messageContent; // Update the TMP_Text component with the response
+                    var firstChoice = jsonResponse.choices[0];
+                    var messageContent = firstChoice.message.content.Trim();
+                    responseText.text = messageContent;
                     Debug.Log($"Setting response text to: {messageContent}");
                 }
                 else
@@ -91,10 +108,29 @@ public class CharacterAI : MonoBehaviour
                 }
             }
         }
+
+        // Re-enable movement after getting the response
+        firstPersonMovement.EnableMovement();
     }
 }
 
 // Helper classes to parse OpenAI response
+[System.Serializable]
+public class OpenAIRequest
+{
+    public string model;
+    public OpenAIMessage[] messages;
+    public int max_tokens;
+    public float temperature;
+}
+
+[System.Serializable]
+public class OpenAIMessage
+{
+    public string role;
+    public string content;
+}
+
 [System.Serializable]
 public class OpenAIResponse
 {
