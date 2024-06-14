@@ -737,5 +737,5 @@ public class MapGenerator : MonoBehaviour
         newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
         terrain.terrainData.terrainLayers = newLayersList.ToArray();
         terrain.transform.position = new Vector3(0, 0, 0);
-       
+     }  
 }
