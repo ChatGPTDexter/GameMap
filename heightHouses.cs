@@ -3,7 +3,7 @@ using System;
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
-using TMPro; // Add this to use TextMeshPro
+using TMPro;
 
 public class MapGenerator : MonoBehaviour
 {
@@ -27,16 +27,13 @@ public class MapGenerator : MonoBehaviour
 
     public GameObject cubePrefab; // Assign the cube prefab here
     public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
+    public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
 
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
     private float[,] originalHeights; // Store original terrain heights
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
-
-    private Camera miniMapCamera; // Mini-map camera
-    private GameObject miniMapUI; // Mini-map UI element
-    private bool isMiniMapVisible = false; // Toggle for mini-map visibility
 
     void Start()
     {
@@ -68,8 +65,8 @@ public class MapGenerator : MonoBehaviour
         SpawnTreesAndRocks();
         RemoveTreesBelowHeight(3f);
         PlaceWater(); // Add water layer
-        SetupMiniMap(); // Setup the mini-map camera and UI
         InstantiateHouses(); // Instantiate and position the houses after terrain generation
+        SetupMiniMap(); // Setup the mini-map
     }
 
     void CalculateTerrainSize()
@@ -281,7 +278,7 @@ public class MapGenerator : MonoBehaviour
         // Adjust terrain heights with smooth transition
         for (int x = 0; x < heights.GetLength(0); x++)
         {
-            for (int z = 0; z < heights.GetLength(1); z++)
+            for (int z = 0; x < heights.GetLength(1); z++)
             {
                 float terrainHeight = heights[x, z] * terrainData.size.y + terrainPos.y;
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
@@ -318,9 +315,9 @@ public class MapGenerator : MonoBehaviour
         // Define the area around the position to elevate
         int radius = CalculateAdjustedDistance(position); // Adjust the radius as needed
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
-        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, xResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
-        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, xResolution - 1);
 
         Debug.Log($"Elevating terrain at range: ({startX},{startZ}) to ({endX},{endZ})");
 
@@ -627,39 +624,6 @@ public class MapGenerator : MonoBehaviour
         return fields.ToArray();
     }
 
-    void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.P))
-        {
-            RestoreOriginalTerrain();
-        }
-
-        if (Input.GetKeyDown(KeyCode.M))
-        {
-            ToggleMiniMap();
-        }
-    }
-
-    void RestoreOriginalTerrain()
-    {
-        if (terrain == null || originalHeights == null)
-        {
-            Debug.LogError("Terrain or original heights not assigned.");
-            return;
-        }
-
-        // Restore the terrain to its original state
-        terrain.terrainData.SetHeights(0, 0, originalHeights);
-
-        // Remove the added texture layer
-        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
-        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
-        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
-        terrain.terrainData.terrainLayers = newLayersList.ToArray();
-        terrain.transform.position = new Vector3(0, 0, 0);
-        Debug.Log("Terrain restored to original state.");
-    }
-
     public int CalculateAdjustedDistance(Vector3 position)
     {
         float nearestDistance = float.MaxValue;
@@ -698,84 +662,12 @@ public class MapGenerator : MonoBehaviour
 
     void SetupMiniMap()
     {
-        // Create a new GameObject for the mini-map camera
-        GameObject miniMapCameraObject = new GameObject("MiniMapCamera");
-        miniMapCamera = miniMapCameraObject.AddComponent<Camera>();
-
-        // Configure the mini-map camera
-        miniMapCamera.orthographic = true;
-        miniMapCamera.orthographicSize = Mathf.Max(maxX - minX, maxZ - minZ) / 2f;
-        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 100, (minZ + maxZ) / 2);
-        miniMapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);
-        miniMapCamera.cullingMask = LayerMask.GetMask("Default");
-
-        // Set the mini-map camera to render to a render texture
-        miniMapCamera.targetTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32);
-        miniMapCamera.gameObject.SetActive(false);
-
-        // Create a UI element to display the mini-map
-        miniMapUI = new GameObject("MiniMapUI");
-        Canvas canvas = miniMapUI.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-        GameObject rawImageObject = new GameObject("MiniMapImage");
-        rawImageObject.transform.parent = miniMapUI.transform;
-        UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
-        rawImage.texture = miniMapCamera.targetTexture;
-        RectTransform rectTransform = rawImage.GetComponent<RectTransform>();
-        rectTransform.anchorMin = new Vector2(0.75f, 0.75f); // Adjust the position on the screen
-        rectTransform.anchorMax = new Vector2(1f, 1f);
-        rectTransform.sizeDelta = new Vector2(256, 256); // Adjust the size of the mini-map
-        miniMapUI.SetActive(false); // Start with the mini-map hidden
-
-        // Create UI elements for house labels
-        foreach (var houseEntry in housePositions)
-        {
-            CreateHouseLabel(houseEntry.Key, houseEntry.Value);
-        }
-    }
-
-    void ToggleMiniMap()
-    {
-        isMiniMapVisible = !isMiniMapVisible;
-        miniMapCamera.gameObject.SetActive(isMiniMapVisible);
-        miniMapUI.SetActive(isMiniMapVisible);
-    }
-
-    void CreateHouseLabel(string label, Vector3 position)
-    {
-        if (houseLabelPrefab == null)
-        {
-            Debug.LogError("House label prefab not assigned.");
-            return;
-        }
-
-        // Create a UI element for the house label
-        GameObject houseLabel = Instantiate(houseLabelPrefab, miniMapUI.transform);
-        TMP_Text labelText = houseLabel.GetComponent<TMP_Text>();
-        if (labelText == null)
-        {
-            Debug.LogError("House label prefab does not have a TMP_Text component.");
-            return;
-        }
-
-        labelText.text = label;
-
-        // Position the label on the mini-map
-        RectTransform labelRectTransform = houseLabel.GetComponent<RectTransform>();
-        Vector2 miniMapPosition = WorldToMiniMapPosition(position);
-        labelRectTransform.anchoredPosition = miniMapPosition;
-    }
-
-    Vector2 WorldToMiniMapPosition(Vector3 worldPosition)
-    {
-        // Convert world position to mini-map position
-        float mapWidth = maxX - minX;
-        float mapHeight = maxZ - minZ;
-        float x = (worldPosition.x - minX) / mapWidth;
-        float z = (worldPosition.z - minZ) / mapHeight;
-
-        return new Vector2(x * 256, z * 256); // Adjust to the mini-map UI size
+        miniMapController.housePositions = housePositions; // Pass the house positions to the MiniMapController
+        miniMapController.minX = minX;
+        miniMapController.maxX = maxX;
+        miniMapController.minZ = minZ;
+        miniMapController.maxZ = maxZ;
+        miniMapController.SetupMiniMap();
     }
 
     void InstantiateHouses()
