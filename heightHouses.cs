@@ -712,4 +712,30 @@ public class MapGenerator : MonoBehaviour
             }
         }
     }
+        void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.P))
+        {
+            RestoreOriginalTerrain();
+        }
+    }
+
+    void RestoreOriginalTerrain()
+    {
+        if (terrain == null || originalHeights == null)
+        {
+            Debug.LogError("Terrain or original heights not assigned.");
+            return;
+        }
+
+        // Restore the terrain to its original state
+        terrain.terrainData.SetHeights(0, 0, originalHeights);
+
+        // Remove the added texture layer
+        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
+        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
+        terrain.terrainData.terrainLayers = newLayersList.ToArray();
+        terrain.transform.position = new Vector3(0, 0, 0);
+       
 }
