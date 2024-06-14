@@ -13,13 +13,13 @@ public class CharacterAI : MonoBehaviour
     public TMP_Text responseText;
     public Button submitButton;
 
-    private const string OpenAIAPIKey = "OpenAi Key";
+    private const string OpenAIAPIKey = "OpenAikey";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
-    private FirstPersonMovement firstPersonMovement;
+    private FirstPersonController firstPersonController;
 
     void Start()
     {
-        firstPersonMovement = FindObjectOfType<FirstPersonMovement>();
+        firstPersonController = FindObjectOfType<FirstPersonController>();
         userInputField.onEndEdit.AddListener(OnSubmitQuestion);
     }
 
@@ -110,7 +110,7 @@ public class CharacterAI : MonoBehaviour
         }
 
         // Re-enable movement after getting the response
-        firstPersonMovement.EnableMovement();
+        firstPersonController.EnableMovement();
     }
 }
 
