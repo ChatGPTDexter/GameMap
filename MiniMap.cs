@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.IO;
 using TMPro;
 using UnityEngine.UI;
 
@@ -11,21 +12,27 @@ public class MiniMapController : MonoBehaviour
     private bool isInputEnabled = true;
     private float zoomLevel = 1f;
     private const float minZoomLevel = 1f;
-    private const float maxZoomLevel = 5f;
+    private const float maxZoomLevel = 10f; // Increase max zoom level for more detail
     private float initialOrthographicSize;
+    private float zoomSpeed = 0.5f;
+    private Vector3 lastMousePosition;
 
-    public Dictionary<string, Vector3> housePositions;
+    public TextAsset housePositionsCsvFile; // CSV file with house positions
     public GameObject houseLabelPrefab;
     public float minX, maxX, minZ, maxZ;
 
     public GameObject player; // Assign the player object here
     public GameObject playerIndicatorPrefab; // Assign the player indicator prefab here
+    public MonoBehaviour firstPersonController; // Assign the first-person controller script here
 
+    public Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private Dictionary<string, TMP_Text> houseLabels = new Dictionary<string, TMP_Text>();
     private RectTransform playerIndicator;
+    private RectTransform miniMapRectTransform;
 
     void Start()
     {
+        LoadHousePositions();
         SetupMiniMap();
     }
 
@@ -40,15 +47,31 @@ public class MiniMapController : MonoBehaviour
         {
             UpdateLabels();
             UpdatePlayerIndicator();
+            HandleZoom();
+            HandlePanning();
+        }
+    }
 
-            if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.Plus))
-            {
-                ZoomIn();
-            }
+    void LoadHousePositions()
+    {
+        if (housePositionsCsvFile == null)
+        {
+            Debug.LogError("CSV file is not assigned.");
+            return;
+        }
 
-            if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.Underscore))
+        string[] lines = housePositionsCsvFile.text.Split('\n');
+
+        foreach (string line in lines)
+        {
+            string[] values = line.Split(',');
+            if (values.Length >= 4)
             {
-                ZoomOut();
+                string label = values[0];
+                if (float.TryParse(values[1], out float x) && float.TryParse(values[2], out float z) && float.TryParse(values[3], out float y))
+                {
+                    housePositions[label] = new Vector3(x, y, z);
+                }
             }
         }
     }
@@ -76,10 +99,10 @@ public class MiniMapController : MonoBehaviour
         rawImageObject.transform.parent = miniMapUI.transform;
         UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
         rawImage.texture = miniMapCamera.targetTexture;
-        RectTransform rectTransform = rawImage.GetComponent<RectTransform>();
-        rectTransform.anchorMin = new Vector2(0.75f, 0.75f);
-        rectTransform.anchorMax = new Vector2(1f, 1f);
-        rectTransform.sizeDelta = new Vector2(256, 256);
+        miniMapRectTransform = rawImage.GetComponent<RectTransform>();
+        miniMapRectTransform.anchorMin = new Vector2(0.75f, 0.75f);
+        miniMapRectTransform.anchorMax = new Vector2(1f, 1f);
+        miniMapRectTransform.sizeDelta = new Vector2(256, 256);
         miniMapUI.SetActive(false);
 
         foreach (var houseEntry in housePositions)
@@ -95,6 +118,25 @@ public class MiniMapController : MonoBehaviour
         isMiniMapVisible = !isMiniMapVisible;
         miniMapCamera.gameObject.SetActive(isMiniMapVisible);
         miniMapUI.SetActive(isMiniMapVisible);
+
+        if (isMiniMapVisible)
+        {
+            if (firstPersonController != null)
+            {
+                firstPersonController.enabled = false;
+            }
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else
+        {
+            if (firstPersonController != null)
+            {
+                firstPersonController.enabled = true;
+            }
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
     }
 
     void CreateHouseLabel(string label, Vector3 position)
@@ -117,8 +159,15 @@ public class MiniMapController : MonoBehaviour
         houseLabels[label] = labelText;
 
         RectTransform labelRectTransform = houseLabel.GetComponent<RectTransform>();
+        if (labelRectTransform == null)
+        {
+            Debug.LogError("House label prefab does not have a RectTransform component.");
+            return;
+        }
+
         Vector2 miniMapPosition = WorldToMiniMapPosition(position);
         labelRectTransform.anchoredPosition = miniMapPosition;
+        houseLabel.SetActive(false); // Initially disable the label
     }
 
     void CreatePlayerIndicator()
@@ -129,21 +178,50 @@ public class MiniMapController : MonoBehaviour
             return;
         }
 
-        GameObject playerIndicator = Instantiate(playerIndicatorPrefab, miniMapUI.transform);
-        RectTransform rectTransform = playerIndicator.GetComponent<RectTransform>();
-        rectTransform.sizeDelta = new Vector2(10, 10); // Adjust the size of the player indicator
-        this.playerIndicator = rectTransform;
+        GameObject playerIndicatorObject = Instantiate(playerIndicatorPrefab, miniMapUI.transform);
+        playerIndicator = playerIndicatorObject.GetComponent<RectTransform>();
+
+        if (playerIndicator == null)
+        {
+            Debug.LogError("Player indicator prefab does not have a RectTransform component.");
+            return;
+        }
+
+        playerIndicator.sizeDelta = new Vector2(10, 10); // Adjust the size of the player indicator
     }
 
     void UpdateLabels()
     {
+        Vector2 localMousePosition;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(miniMapRectTransform, Input.mousePosition, null, out localMousePosition);
+        Vector3 cursorWorldPosition = MiniMapToWorldPosition(localMousePosition);
+        Vector3 closestHousePosition = Vector3.zero;
+        string closestHouseLabel = null;
+        float closestDistance = float.MaxValue;
+
         foreach (var houseEntry in housePositions)
         {
-            if (houseLabels.TryGetValue(houseEntry.Key, out TMP_Text label))
+            float distance = Vector3.Distance(cursorWorldPosition, houseEntry.Value);
+            if (distance < closestDistance)
             {
+                closestDistance = distance;
+                closestHousePosition = houseEntry.Value;
+                closestHouseLabel = houseEntry.Key;
+            }
+        }
+
+        foreach (var houseEntry in housePositions)
+        {
+            if (houseLabels.TryGetValue(houseEntry.Key, out TMP_Text label) && label != null)
+            {
+                label.gameObject.SetActive(houseEntry.Key == closestHouseLabel);
+
                 RectTransform labelRectTransform = label.GetComponent<RectTransform>();
-                Vector2 miniMapPosition = WorldToMiniMapPosition(houseEntry.Value);
-                labelRectTransform.anchoredPosition = miniMapPosition;
+                if (labelRectTransform != null)
+                {
+                    Vector2 miniMapPosition = WorldToMiniMapPosition(houseEntry.Value);
+                    labelRectTransform.anchoredPosition = miniMapPosition;
+                }
             }
         }
     }
@@ -166,19 +244,73 @@ public class MiniMapController : MonoBehaviour
         float x = (worldPosition.x - minX) / mapWidth;
         float z = (worldPosition.z - minZ) / mapHeight;
 
-        return new Vector2(x * 256, z * 256); // Adjust to the mini-map UI size
+        return new Vector2(x * miniMapRectTransform.sizeDelta.x, z * miniMapRectTransform.sizeDelta.y); // Adjust to the mini-map UI size
     }
 
-    void ZoomIn()
+    Vector3 MiniMapToWorldPosition(Vector2 miniMapPosition)
     {
-        zoomLevel = Mathf.Clamp(zoomLevel - 0.1f, minZoomLevel, maxZoomLevel);
-        miniMapCamera.orthographicSize = initialOrthographicSize / zoomLevel;
+        float mapWidth = maxX - minX;
+        float mapHeight = maxZ - minZ;
+
+        float x = (miniMapPosition.x / miniMapRectTransform.sizeDelta.x) * mapWidth + minX;
+        float z = (miniMapPosition.y / miniMapRectTransform.sizeDelta.y) * mapHeight + minZ;
+
+        return new Vector3(x, 0, z);
     }
 
-    void ZoomOut()
+    bool IsMouseOverMiniMap()
     {
-        zoomLevel = Mathf.Clamp(zoomLevel + 0.1f, minZoomLevel, maxZoomLevel);
-        miniMapCamera.orthographicSize = initialOrthographicSize / zoomLevel;
+        Vector2 localMousePosition = miniMapRectTransform.InverseTransformPoint(Input.mousePosition);
+        return miniMapRectTransform.rect.Contains(localMousePosition);
+    }
+
+    void HandleZoom()
+    {
+        if (IsMouseOverMiniMap())
+        {
+            if (Input.GetKey(KeyCode.Alpha1))
+            {
+                ZoomAtMousePosition(1);
+            }
+            if (Input.GetKey(KeyCode.Alpha2))
+            {
+                ZoomAtMousePosition(-1);
+            }
+        }
+    }
+
+    void ZoomAtMousePosition(float direction)
+    {
+        Vector2 localMousePosition;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(miniMapRectTransform, Input.mousePosition, null, out localMousePosition);
+
+        Vector3 miniMapWorldPosition = MiniMapToWorldPosition(localMousePosition);
+
+        float newZoomLevel = Mathf.Clamp(zoomLevel + direction * zoomSpeed * Time.deltaTime, minZoomLevel, maxZoomLevel);
+        if (newZoomLevel != zoomLevel)
+        {
+            Vector3 directionToMouse = miniMapCamera.transform.position - miniMapWorldPosition;
+            float zoomFactor = zoomLevel / newZoomLevel;
+            miniMapCamera.transform.position = miniMapWorldPosition + directionToMouse * zoomFactor;
+            miniMapCamera.orthographicSize = initialOrthographicSize / newZoomLevel;
+            zoomLevel = newZoomLevel;
+        }
+    }
+
+    void HandlePanning()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            lastMousePosition = Input.mousePosition;
+        }
+
+        if (Input.GetMouseButton(0))
+        {
+            Vector3 delta = Input.mousePosition - lastMousePosition;
+            Vector3 translation = new Vector3(-delta.x, 0, -delta.y) * (miniMapCamera.orthographicSize / initialOrthographicSize);
+            miniMapCamera.transform.Translate(translation, Space.World);
+            lastMousePosition = Input.mousePosition;
+        }
     }
 
     public void DisableInput()
