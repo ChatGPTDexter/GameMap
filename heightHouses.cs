@@ -34,6 +34,7 @@ public class MapGenerator : MonoBehaviour
     private float[,] originalHeights; // Store original terrain heights
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
+    public bool canclearmap = true;
 
     void Start()
     {
@@ -712,9 +713,9 @@ public class MapGenerator : MonoBehaviour
             }
         }
     }
-        void Update()
+    void Update()
     {
-        if (Input.GetKeyDown(KeyCode.P))
+        if (canclearmap && Input.GetKeyDown(KeyCode.P))
         {
             RestoreOriginalTerrain();
         }
@@ -737,5 +738,5 @@ public class MapGenerator : MonoBehaviour
         newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
         terrain.terrainData.terrainLayers = newLayersList.ToArray();
         terrain.transform.position = new Vector3(0, 0, 0);
-     }  
+    }
 }
