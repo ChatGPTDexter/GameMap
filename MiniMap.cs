@@ -20,6 +20,7 @@ public class MiniMapController : MonoBehaviour
     public TextAsset housePositionsCsvFile; // CSV file with house positions
     public GameObject houseLabelPrefab;
     public float minX, maxX, minZ, maxZ;
+    public bool canMiniMap = true;  
 
     public GameObject player; // Assign the player object here
     public GameObject playerIndicatorPrefab; // Assign the player indicator prefab here
@@ -38,7 +39,7 @@ public class MiniMapController : MonoBehaviour
 
     void Update()
     {
-        if (isInputEnabled && Input.GetKeyDown(KeyCode.M))
+        if (isInputEnabled && Input.GetKeyDown(KeyCode.M) && canMiniMap)
         {
             ToggleMiniMap();
         }
