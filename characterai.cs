@@ -13,22 +13,30 @@ public class CharacterAI : MonoBehaviour
     public TMP_Text responseText;
     public Button submitButton;
 
-    private const string OpenAIAPIKey = "APi-key";
+    private const string OpenAIAPIKey = "api-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
     private FirstPersonMovement firstPersonMovement;
+    private MapGenerator mapGenerator;
+    private Jump jump;
+    private MiniMapController miniMapController;
 
     // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
+    private bool interactionEnabled = false;
+
     void Start()
     {
         firstPersonMovement = FindObjectOfType<FirstPersonMovement>();
+        mapGenerator = FindObjectOfType<MapGenerator>();
+        jump = FindObjectOfType<Jump>();  // Assuming Jump script controls jumping behavior
+        miniMapController = FindObjectOfType<MiniMapController>();  // Assuming MiniMapController script handles mini-map functionality
 
         // Listen for the Return key to submit the question
         userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
 
-        // Enable interaction to ensure input field is ready
-        EnableInteraction();
+        // Disable interaction initially
+        DisableInteraction();
     }
 
     public void Initialize(string label, string script)
@@ -46,18 +54,53 @@ public class CharacterAI : MonoBehaviour
 
     public void EnableInteraction()
     {
+        interactionEnabled = true;
         userInputField.gameObject.SetActive(true);
         userInputField.Select();
         userInputField.ActivateInputField();
+
+        if (mapGenerator != null)
+        {
+            mapGenerator.canclearmap = false;
+        }
+
+        if (miniMapController != null)
+        {
+            miniMapController.canMiniMap = false;
+        }
+
+        // Disable jumping
+        if (jump != null)
+        {
+            jump.canJump = false;
+        }
     }
 
     public void DisableInteraction()
     {
+        interactionEnabled = false;
         userInputField.gameObject.SetActive(false);
+
+        if (mapGenerator != null)
+        {
+            mapGenerator.canclearmap = true;
+        }
+
+        if (miniMapController != null)
+        {
+            miniMapController.canMiniMap = true;
+        }
+
+        // Enable jumping
+        if (jump != null)
+        {
+            jump.canJump = true;
+        }
     }
 
     public void OnAskQuestion()
     {
+        EnableInteraction();
         string userQuestion = userInputField.text;
         if (!string.IsNullOrEmpty(userQuestion))
         {
@@ -131,8 +174,11 @@ public class CharacterAI : MonoBehaviour
             }
         }
 
-        // Re-enable movement after getting the response
-        firstPersonMovement.EnableMovement();
+        // Re-enable movement after getting the response, only if interaction is still enabled
+        if (interactionEnabled && firstPersonMovement != null)
+        {
+            firstPersonMovement.EnableMovement();
+        }
     }
 }
 
