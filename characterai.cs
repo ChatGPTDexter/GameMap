@@ -13,20 +13,35 @@ public class CharacterAI : MonoBehaviour
     public TMP_Text responseText;
     public Button submitButton;
 
-    private const string OpenAIAPIKey = "openai";
+    private const string OpenAIAPIKey = "APi-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
     private FirstPersonMovement firstPersonMovement;
+
+    // List to maintain chat history
+    private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     void Start()
     {
         firstPersonMovement = FindObjectOfType<FirstPersonMovement>();
-        userInputField.onEndEdit.AddListener(OnSubmitQuestion);
+
+        // Listen for the Return key to submit the question
+        userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
+
+        // Enable interaction to ensure input field is ready
+        EnableInteraction();
     }
 
     public void Initialize(string label, string script)
     {
         topicLabel = label;
         transcript = script;
+
+        // Initialize chat history with system message
+        chatHistory.Add(new OpenAIMessage
+        {
+            role = "system",
+            content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions, lessons, challenges, etc., based on portraying the valid information from this video and based on valid user input."
+        });
     }
 
     public void EnableInteraction()
@@ -41,23 +56,30 @@ public class CharacterAI : MonoBehaviour
         userInputField.gameObject.SetActive(false);
     }
 
-    private void OnSubmitQuestion(string userQuestion)
-    {
-        if (Input.GetKeyDown(KeyCode.Return) && !string.IsNullOrEmpty(userQuestion))
-        {
-            string prompt = $"Topic: {topicLabel}\nTranscript: {transcript}\n\nUser: {userQuestion}\nBot:";
-            StartCoroutine(GetResponseFromAI(prompt));
-        }
-    }
-
     public void OnAskQuestion()
     {
         string userQuestion = userInputField.text;
-        if (string.IsNullOrEmpty(userQuestion)) return;
+        if (!string.IsNullOrEmpty(userQuestion))
+        {
+            chatHistory.Add(new OpenAIMessage { role = "user", content = userQuestion });
 
-        string prompt = $"Topic: {topicLabel}\nTranscript: {transcript}\n\nUser: {userQuestion}\nBot:";
+            string prompt = GetChatHistoryAsString();
+            StartCoroutine(GetResponseFromAI(prompt));
 
-        StartCoroutine(GetResponseFromAI(prompt));
+            // Clear the input field after submission
+            userInputField.text = string.Empty;
+            userInputField.ActivateInputField();
+        }
+    }
+
+    private string GetChatHistoryAsString()
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        foreach (var message in chatHistory)
+        {
+            sb.AppendLine($"{message.role}: {message.content}");
+        }
+        return sb.ToString();
     }
 
     private IEnumerator GetResponseFromAI(string prompt)
@@ -65,11 +87,7 @@ public class CharacterAI : MonoBehaviour
         var requestData = new OpenAIRequest
         {
             model = "gpt-3.5-turbo",
-            messages = new[]
-            {
-                new OpenAIMessage { role = "system", content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions lessons challenges etc. based on portraying the valid information from this video and based on valid user input." },
-                new OpenAIMessage { role = "user", content = prompt }
-            },
+            messages = chatHistory.ToArray(),
             max_tokens = 150,
             temperature = 0.7f
         };
@@ -99,6 +117,10 @@ public class CharacterAI : MonoBehaviour
                 {
                     var firstChoice = jsonResponse.choices[0];
                     var messageContent = firstChoice.message.content.Trim();
+
+                    // Update chat history with AI response
+                    chatHistory.Add(new OpenAIMessage { role = "assistant", content = messageContent });
+
                     responseText.text = messageContent;
                     Debug.Log($"Setting response text to: {messageContent}");
                 }
