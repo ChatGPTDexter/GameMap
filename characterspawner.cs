@@ -184,8 +184,9 @@ public class CharacterSpawner : MonoBehaviour
 
             character.name = topic.Label;
 
-            Vector3 uiPosition = character.transform.position + new Vector3(2, 0, 0);
-            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.Euler(0, 180, 0), character.transform);
+            // Position the UI Canvas above the character
+            Vector3 uiPosition = character.transform.position + new Vector3(0, 2, 0); // Adjust Y value to position above character
+            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity, character.transform);
 
             Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
             canvasComponent.renderMode = RenderMode.WorldSpace;
@@ -251,6 +252,8 @@ public class CharacterSpawner : MonoBehaviour
             return;
         }
 
+        uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
+
         TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
 
         TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
@@ -261,7 +264,16 @@ public class CharacterSpawner : MonoBehaviour
         if (inputField != null)
         {
             characterAI.userInputField = inputField;
-            Debug.Log("Input field assigned.");
+            // Manually set the position and size of the input field
+            RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
+            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
+            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+            inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
+            inputField.textComponent.fontSize = 20; // Set font size
+            inputField.textComponent.color = Color.black; // Set text color to black
+
+            // Ensure the Return key submits the question
+            inputField.onSubmit.AddListener(delegate { characterAI.OnAskQuestion(); });
         }
         else
         {
@@ -271,22 +283,31 @@ public class CharacterSpawner : MonoBehaviour
         if (responseText != null)
         {
             characterAI.responseText = responseText;
-            responseText.fontSize = 20.0f;
+            responseText.fontSize = 24.0f;
             responseText.color = Color.red;
             responseText.enableAutoSizing = false;
             responseText.alignment = TextAlignmentOptions.TopLeft;
-            Debug.Log("Response text assigned and scaled down.");
+            responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
+            // Adjust the position and size of the response text box
+            RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
+            responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
+            responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
+            // Add a white background
         }
         else
         {
-            Debug.LogWarning("No TMP_Text found in the UI Canvas for response.");
+            Debug.LogWarning("No TMP_Text found in the UI Canvas.");
         }
 
         if (submitButton != null)
         {
             characterAI.submitButton = submitButton;
+            // Manually set the position and size of the button
+            RectTransform buttonRect = submitButton.GetComponent<RectTransform>();
+            buttonRect.anchoredPosition = new Vector2(0, -100); // Adjust position
+            buttonRect.sizeDelta = new Vector2(200, 50); // Adjust size
             submitButton.onClick.AddListener(characterAI.OnAskQuestion);
-            Debug.Log("Submit button assigned and listener added.");
+            Debug.Log("Submit button assigned.");
         }
         else
         {
