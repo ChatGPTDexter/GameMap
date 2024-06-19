@@ -1,7 +1,4 @@
 using UnityEngine;
-using System.Collections.Generic;
-using System.IO;
-using TMPro;
 using UnityEngine.UI;
 
 public class MiniMapController : MonoBehaviour
@@ -17,23 +14,18 @@ public class MiniMapController : MonoBehaviour
     private float zoomSpeed = 0.5f;
     private Vector3 lastMousePosition;
 
-    public TextAsset housePositionsCsvFile; // CSV file with house positions
-    public GameObject houseLabelPrefab;
     public float minX, maxX, minZ, maxZ;
-    public bool canMiniMap = true;  
+    public bool canMiniMap = true;
 
     public GameObject player; // Assign the player object here
     public GameObject playerIndicatorPrefab; // Assign the player indicator prefab here
     public MonoBehaviour firstPersonController; // Assign the first-person controller script here
 
-    public Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
-    private Dictionary<string, TMP_Text> houseLabels = new Dictionary<string, TMP_Text>();
     private RectTransform playerIndicator;
     private RectTransform miniMapRectTransform;
 
     void Start()
     {
-        LoadHousePositions();
         SetupMiniMap();
     }
 
@@ -46,34 +38,9 @@ public class MiniMapController : MonoBehaviour
 
         if (isMiniMapVisible)
         {
-            UpdateLabels();
             UpdatePlayerIndicator();
             HandleZoom();
             HandlePanning();
-        }
-    }
-
-    void LoadHousePositions()
-    {
-        if (housePositionsCsvFile == null)
-        {
-            Debug.LogError("CSV file is not assigned.");
-            return;
-        }
-
-        string[] lines = housePositionsCsvFile.text.Split('\n');
-
-        foreach (string line in lines)
-        {
-            string[] values = line.Split(',');
-            if (values.Length >= 4)
-            {
-                string label = values[0];
-                if (float.TryParse(values[1], out float x) && float.TryParse(values[2], out float z) && float.TryParse(values[3], out float y))
-                {
-                    housePositions[label] = new Vector3(x, y, z);
-                }
-            }
         }
     }
 
@@ -85,9 +52,14 @@ public class MiniMapController : MonoBehaviour
         miniMapCamera.orthographic = true;
         initialOrthographicSize = Mathf.Max(maxX - minX, maxZ - minZ) / 2f;
         miniMapCamera.orthographicSize = initialOrthographicSize;
-        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 100, (minZ + maxZ) / 2);
+        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 200, (minZ + maxZ) / 2); // Increase height to 200
         miniMapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);
-        miniMapCamera.cullingMask = LayerMask.GetMask("Default");
+
+        // Include all layers in the culling mask
+        miniMapCamera.cullingMask = ~0; // ~0 sets the culling mask to include all layers
+
+        miniMapCamera.clearFlags = CameraClearFlags.SolidColor;
+        miniMapCamera.backgroundColor = Color.gray;
 
         miniMapCamera.targetTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32);
         miniMapCamera.gameObject.SetActive(false);
@@ -98,18 +70,13 @@ public class MiniMapController : MonoBehaviour
 
         GameObject rawImageObject = new GameObject("MiniMapImage");
         rawImageObject.transform.parent = miniMapUI.transform;
-        UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
+        RawImage rawImage = rawImageObject.AddComponent<RawImage>();
         rawImage.texture = miniMapCamera.targetTexture;
         miniMapRectTransform = rawImage.GetComponent<RectTransform>();
         miniMapRectTransform.anchorMin = new Vector2(0.75f, 0.75f);
         miniMapRectTransform.anchorMax = new Vector2(1f, 1f);
         miniMapRectTransform.sizeDelta = new Vector2(256, 256);
         miniMapUI.SetActive(false);
-
-        foreach (var houseEntry in housePositions)
-        {
-            CreateHouseLabel(houseEntry.Key, houseEntry.Value);
-        }
 
         CreatePlayerIndicator();
     }
@@ -140,37 +107,6 @@ public class MiniMapController : MonoBehaviour
         }
     }
 
-    void CreateHouseLabel(string label, Vector3 position)
-    {
-        if (houseLabelPrefab == null)
-        {
-            Debug.LogError("House label prefab not assigned.");
-            return;
-        }
-
-        GameObject houseLabel = Instantiate(houseLabelPrefab, miniMapUI.transform);
-        TMP_Text labelText = houseLabel.GetComponent<TMP_Text>();
-        if (labelText == null)
-        {
-            Debug.LogError("House label prefab does not have a TMP_Text component.");
-            return;
-        }
-
-        labelText.text = label;
-        houseLabels[label] = labelText;
-
-        RectTransform labelRectTransform = houseLabel.GetComponent<RectTransform>();
-        if (labelRectTransform == null)
-        {
-            Debug.LogError("House label prefab does not have a RectTransform component.");
-            return;
-        }
-
-        Vector2 miniMapPosition = WorldToMiniMapPosition(position);
-        labelRectTransform.anchoredPosition = miniMapPosition;
-        houseLabel.SetActive(false); // Initially disable the label
-    }
-
     void CreatePlayerIndicator()
     {
         if (playerIndicatorPrefab == null)
@@ -189,42 +125,6 @@ public class MiniMapController : MonoBehaviour
         }
 
         playerIndicator.sizeDelta = new Vector2(10, 10); // Adjust the size of the player indicator
-    }
-
-    void UpdateLabels()
-    {
-        Vector2 localMousePosition;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(miniMapRectTransform, Input.mousePosition, null, out localMousePosition);
-        Vector3 cursorWorldPosition = MiniMapToWorldPosition(localMousePosition);
-        Vector3 closestHousePosition = Vector3.zero;
-        string closestHouseLabel = null;
-        float closestDistance = float.MaxValue;
-
-        foreach (var houseEntry in housePositions)
-        {
-            float distance = Vector3.Distance(cursorWorldPosition, houseEntry.Value);
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestHousePosition = houseEntry.Value;
-                closestHouseLabel = houseEntry.Key;
-            }
-        }
-
-        foreach (var houseEntry in housePositions)
-        {
-            if (houseLabels.TryGetValue(houseEntry.Key, out TMP_Text label) && label != null)
-            {
-                label.gameObject.SetActive(houseEntry.Key == closestHouseLabel);
-
-                RectTransform labelRectTransform = label.GetComponent<RectTransform>();
-                if (labelRectTransform != null)
-                {
-                    Vector2 miniMapPosition = WorldToMiniMapPosition(houseEntry.Value);
-                    labelRectTransform.anchoredPosition = miniMapPosition;
-                }
-            }
-        }
     }
 
     void UpdatePlayerIndicator()
