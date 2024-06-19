@@ -9,7 +9,7 @@ public class HouseNames : MonoBehaviour
     public CSVData transcripts; // CSV containing transcripts
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
 
-    private const string OpenAIAPIKey = "api-key";
+    private const string OpenAIAPIKey = "apikey";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
@@ -36,9 +36,12 @@ public class HouseNames : MonoBehaviour
         // Update rotation of each name object to face the camera
         foreach (var nameObject in nameObjects)
         {
-            Vector3 directionToCamera = mainCamera.transform.position - nameObject.transform.position;
-            Quaternion rotation = Quaternion.LookRotation(-directionToCamera);
-            nameObject.transform.rotation = rotation;
+            if (nameObject.CompareTag("FaceCamera"))
+            {
+                Vector3 directionToCamera = mainCamera.transform.position - nameObject.transform.position;
+                Quaternion rotation = Quaternion.LookRotation(-directionToCamera);
+                nameObject.transform.rotation = rotation;
+            }
         }
     }
 
@@ -171,14 +174,32 @@ public class HouseNames : MonoBehaviour
                 textMesh.alignment = TextAlignmentOptions.Center; // Center text
 
                 RectTransform rectTransform = nameObject.GetComponent<RectTransform>();
-                rectTransform.sizeDelta = new Vector2(100, 50); // Adjust these values as needed
+                rectTransform.sizeDelta = new Vector2(200, 50); // Adjust these values as needed to make it wider
                 rectTransform.pivot = new Vector2(0.5f, 0.5f); // Center the pivot
 
                 // Optionally, you can parent it to another GameObject for organization
                 nameObject.transform.SetParent(transform);
 
+                // Tag the original name object to face the camera
+                nameObject.tag = "FaceCamera";
+
                 // Add the created nameObject to the list
                 nameObjects.Add(nameObject);
+
+                // Create a duplicate 10 units above and rotated to face the sky
+                GameObject duplicateNameObject = Instantiate(nameObject, namePosition + Vector3.up * 10f, Quaternion.Euler(90f, 0f, 0f));
+                duplicateNameObject.tag = "Untagged"; // Ensure the duplicate does not have the tag
+                duplicateNameObject.transform.SetParent(transform);
+
+                // Adjust font size of the duplicate
+                TextMeshPro duplicateTextMesh = duplicateNameObject.GetComponent<TextMeshPro>();
+                duplicateTextMesh.fontSize = 400; // Increase font size as needed
+
+                // Adjust the size of the duplicate's text box to make it wider
+                RectTransform duplicateRectTransform = duplicateNameObject.GetComponent<RectTransform>();
+                duplicateRectTransform.sizeDelta = new Vector2(500, 100); // Adjust these values as needed
+
+                nameObjects.Add(duplicateNameObject);
             }
             else
             {
@@ -244,3 +265,4 @@ public class CSVData
     public TextAsset csvFile;
     public List<string[]> parsedData;
 }
+
