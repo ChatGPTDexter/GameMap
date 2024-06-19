@@ -8,8 +8,9 @@ public class HouseNames : MonoBehaviour
 {
     public CSVData transcripts; // CSV containing transcripts
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
+    public string duplicateLayerName = "MiniMapOnly"; // Name of the layer for duplicates
 
-    private const string OpenAIAPIKey = "apikey";
+    private const string OpenAIAPIKey = "api";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
@@ -193,11 +194,22 @@ public class HouseNames : MonoBehaviour
 
                 // Adjust font size of the duplicate
                 TextMeshPro duplicateTextMesh = duplicateNameObject.GetComponent<TextMeshPro>();
-                duplicateTextMesh.fontSize = 400; // Increase font size as needed
+                duplicateTextMesh.fontSize = 300; // Increase font size as needed
 
                 // Adjust the size of the duplicate's text box to make it wider
                 RectTransform duplicateRectTransform = duplicateNameObject.GetComponent<RectTransform>();
                 duplicateRectTransform.sizeDelta = new Vector2(500, 100); // Adjust these values as needed
+
+                // Set the duplicate to the specified layer
+                int duplicateLayer = LayerMask.NameToLayer(duplicateLayerName);
+                if (duplicateLayer != -1)
+                {
+                    duplicateNameObject.layer = duplicateLayer;
+                }
+                else
+                {
+                    Debug.LogWarning($"Layer '{duplicateLayerName}' not found. Please ensure the layer exists.");
+                }
 
                 nameObjects.Add(duplicateNameObject);
             }
