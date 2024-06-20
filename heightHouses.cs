@@ -28,7 +28,6 @@ public class MapGenerator : MonoBehaviour
     public GameObject cubePrefab; // Assign the cube prefab here
     public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
     public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
-
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
     private float[,] originalHeights; // Store original terrain heights
@@ -198,6 +197,9 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
+        // Clear existing house positions
+        housePositions.Clear();
+
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -221,16 +223,6 @@ public class MapGenerator : MonoBehaviour
             {
                 Vector3 position = new Vector3(x, y, z);
                 housePositions[label] = position;
-
-                try
-                {
-                    // Adjust terrain and get the corrected height
-                    ElevateTerrainAround(position);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Error adjusting terrain at position {position}: {ex.Message}");
-                }
             }
             else
             {
@@ -238,6 +230,21 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
+        // Create an influence map for the entire terrain
+        int xResolution = terrain.terrainData.heightmapResolution;
+        int zResolution = terrain.terrainData.heightmapResolution;
+        float[,] influenceMap = new float[xResolution, zResolution];
+
+        foreach (var houseEntry in housePositions)
+        {
+            Vector3 position = houseEntry.Value;
+            AddInfluenceToMap(influenceMap, position);
+        }
+
+        // Apply the influence map to the terrain
+        ApplyInfluenceMapToTerrain(influenceMap);
+
+        // Generate roads after terrain modification
         GenerateRoadsFromMST();
     }
 
@@ -254,6 +261,68 @@ public class MapGenerator : MonoBehaviour
         return highestY;
     }
 
+    void AddInfluenceToMap(float[,] influenceMap, Vector3 position)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        int radius = CalculateAdjustedDistance(position) * 2; // Increase radius for wider influence
+
+        for (int x = 0; x < xResolution; x++)
+        {
+            for (int z = 0; z < zResolution; z++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX, relativeZ));
+                if (distance <= radius)
+                {
+                    float influence = CalculateInfluence(distance, radius, position.y * elevationFactor);
+                    influenceMap[x, z] += influence; // Accumulate influence
+                }
+            }
+        }
+    }
+    float CalculateInfluence(float distance, float radius, float maxElevation)
+    {
+        float normalizedDistance = distance / radius;
+        float falloff = 1 - Mathf.Pow(normalizedDistance, 2); // Quadratic falloff for smoother transition
+        return maxElevation * falloff;
+    }
+
+    void ApplyInfluenceMapToTerrain(float[,] influenceMap)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        float[,] heights = terrainData.GetHeights(0, 0, xResolution, zResolution);
+
+        float maxInfluence = 0f;
+        for (int x = 0; x < xResolution; x++)
+        {
+            for (int z = 0; z < zResolution; z++)
+            {
+                maxInfluence = Mathf.Max(maxInfluence, influenceMap[x, z]);
+            }
+        }
+
+        for (int x = 0; x < xResolution; x++)
+        {
+            for (int z = 0; z < zResolution; z++)
+            {
+                float normalizedInfluence = influenceMap[x, z] / maxInfluence;
+                float smoothedInfluence = Mathf.SmoothStep(0, 1, normalizedInfluence);
+                heights[x, z] += smoothedInfluence * 0.1f; // Adjust the multiplier to control overall elevation
+            }
+        }
+
+        terrainData.SetHeights(0, 0, heights);
+    }
     void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
     {
         TerrainData terrainData = terrain.terrainData;
@@ -313,12 +382,13 @@ public class MapGenerator : MonoBehaviour
         // Convert position to terrain coordinates
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
-        // Define the area around the position to elevate
-        int radius = CalculateAdjustedDistance(position); // Adjust the radius as needed
+
+        // Increase the radius for wider mounds
+        int radius = CalculateAdjustedDistance(position); 
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
-        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
-        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
 
         Debug.Log($"Elevating terrain at range: ({startX},{startZ}) to ({endX},{endZ})");
 
@@ -326,9 +396,8 @@ public class MapGenerator : MonoBehaviour
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
         // Calculate maximum elevation based on elevation factor
-        float maxElevation = Mathf.Min(45f, position.y * elevationFactor) / terrainData.size.y;
-        float maxIncr = 0;
-        float mindist = 75;
+        float maxElevation = Mathf.Min(20f, position.y * elevationFactor) / terrainData.size.y; // Further reduced max elevation
+
         // Calculate falloff based on distance from the center
         for (int x = 0; x < heights.GetLength(0); x++)
         {
@@ -340,25 +409,17 @@ public class MapGenerator : MonoBehaviour
                 // Calculate height increment based on maximum elevation and falloff
                 float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
 
-                if (heightIncrement > maxIncr && distance < mindist)
-                {
-                    maxIncr = heightIncrement;
-                    mindist = distance;
-                }
-                else if (heightIncrement < maxIncr && distance < mindist)
-                {
-                    heightIncrement = maxIncr;
-                }
-
-                heights[x, z] += heightIncrement;
+                // Smooth blending with existing height
+                float blendFactor = Mathf.SmoothStep(0, 1, heightIncrement / maxElevation);
+                heights[x, z] = Mathf.Lerp(heights[x, z], heights[x, z] + heightIncrement, blendFactor);
             }
         }
 
-        Debug.Log($"This is the maxIncr: {maxIncr} with this y: {position.y}");
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
         Debug.Log("Terrain elevation applied");
     }
+    
 
     void AddTerrainLayer()
     {
@@ -400,25 +461,17 @@ public class MapGenerator : MonoBehaviour
 
     float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
-        // Adjust the parameters as needed for your desired falloff curve
-        float maxDistance = 25f; // Radius
-        float plateauThreshold = 1f; // Threshold for plateau effect
-        float plateauStrength = 0.5f; // Strength of plateau effect
-        float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
-        float falloff = Mathf.Clamp01(1 - distance / maxDistance);
-        float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
+        float maxDistance = radius;
+        float falloffExponent = 0.2f; // Even lower value for more gradual falloff
+        
+        // Remove plateau effect for smoother mounds
+        float falloff = Mathf.Pow(1 - Mathf.Clamp01(distance / maxDistance), falloffExponent);
 
-        // Calculate height increment with maximum limit at the center and plateau effect near the top
-        float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
-        if (radius < 25)
-        {
-            falloff = Mathf.Clamp01(1 - distance / radius);
-            heightIncrement = falloff * maxElevation;
-        }
+        // Calculate height increment with more gradual falloff
+        float heightIncrement = maxElevation * falloff;
 
         return heightIncrement;
     }
-
     void GenerateRoadsFromMST()
     {
         Debug.Log("GenerateRoadsFromMST");
@@ -663,7 +716,6 @@ public class MapGenerator : MonoBehaviour
 
     void SetupMiniMap()
     {
-        miniMapController.housePositions = housePositions; // Pass the house positions to the MiniMapController
         miniMapController.minX = minX;
         miniMapController.maxX = maxX;
         miniMapController.minZ = minZ;
