@@ -184,15 +184,27 @@ public class CharacterSpawner : MonoBehaviour
 
             character.name = topic.Label;
 
-            // Position the UI Canvas above the character
-            Vector3 uiPosition = character.transform.position + new Vector3(0, 2, 0); // Adjust Y value to position above character
-            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity, character.transform);
+        
+
+            // Position the UI Canvas slightly in front of the character
+            Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+
+            
 
             Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
             canvasComponent.renderMode = RenderMode.WorldSpace;
 
+            // Set the canvas as a child of the character to follow its movements
             uiCanvas.transform.SetParent(character.transform);
+
+            // Apply a 180-degree rotation to the canvas around the Y-axis
+            uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+
             uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
+            // Set the canvas sorting order (Remove the duplicate declaration)
+            canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
 
             AssignUIElements(characterAI, uiCanvas);
         }
@@ -284,7 +296,7 @@ public class CharacterSpawner : MonoBehaviour
         {
             characterAI.responseText = responseText;
             responseText.fontSize = 24.0f;
-            responseText.color = Color.red;
+            responseText.color = Color.black;
             responseText.enableAutoSizing = false;
             responseText.alignment = TextAlignmentOptions.TopLeft;
             responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
