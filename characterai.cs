@@ -48,7 +48,7 @@ public class CharacterAI : MonoBehaviour
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are a game leader for the topic: {topicLabel}. Use the following transcript: {transcript} as information in order to create a game with questions, lessons, challenges, etc., based on portraying the valid information from this video and based on valid user input."
+            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic by creating an interactive experience. You should guide the user by explaining concepts clearly, answering questions, and providing relevant information from the transcript. Additionally, to make the learning experience more engaging, present the user with a challenging riddle related to the topic. The answer to the riddle must be found within the information in the transcript, encouraging the user to think critically and reflect on what they've learned."
         });
     }
 
