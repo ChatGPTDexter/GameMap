@@ -1,102 +1,102 @@
-Label,x,y,z
-"Introduction to Moles - AP Chem Unit 1, Topic 1a",395.0476989746094,-559.7734985351562,55.0
-"Molar Mass and its Applications - AP Chem Unit 1, Topic 1b",424.552978515625,-617.5390625,12.43796487280455
-"Isotopes, Atomic Mass, & Mass Spectroscopy - AP Chem Unit 1, Topic 2",562.3660278320312,-1110.19140625,15.106881680105007
-"Composition of Pure Substances - AP Chem Unit 1, Topic 3",588.5903930664062,-530.8646850585938,12.528595537221076
-"Composition of Mixtures - AP Chem, Unit 1, Topic 4",528.3785400390625,-816.144287109375,13.169260578786174
-"Atomic Structure & Coulomb's Law - AP Chem Unit 1, Topic 5a",1023.483154296875,-1491.4766845703125,11.625414088380523
-"Electron Configurations - AP Chem Unit 1, Topic 5b",1317.821044921875,-1215.749267578125,10.744109006812927
-"Photoelectron Spectroscopy - AP Chem Unit 1, Topic 6",1069.4365234375,-1241.17626953125,19.732170760672545
-"Periodic Trends: Ionization Energy - AP Chem Unit 1, Topic 7a",1029.4051513671875,-1704.92626953125,13.513032064504031
-"Periodic Trends: Atomic Radius & Ionic Radius - AP Chem Unit 1, Topic 7b",1161.8533935546875,-1574.94189453125,9.097131070691919
-"Periodic Trends: Electronegativity - AP Chem Unit 1, Topic 7c",1332.5855712890625,-1411.502685546875,7.318894930933183
-"Valence Electrons & Ionic Compounds - AP Chem Unit 1, Topic 8",1151.638916015625,-1345.629638671875,7.084505281580099
-"Types of Chemical Bonds - AP Chem Unit 2, Topic 1",989.1962280273438,-1215.46435546875,19.475904744046503
-"Energy, Ionic Solids, Metals, & Alloys - AP Chem Unit 2, Topics 2-4",673.8419799804688,-1316.754638671875,15.038127382961436
-"Lewis Electron-Dot Diagrams - AP Chem Unit 2, Topic 5A",903.3023071289062,-1143.5592041015625,10.972248265516594
-"Exceptions to the Octet Rule - AP Chem Unit 2, Topic 5B",856.4931030273438,-1480.32080078125,9.525282830176886
-"Resonance and Formal Charge - AP Chem Unit 2, Topic 6",747.4248046875,-1372.9761962890625,12.644227764235264
-"Sigma & Pi Bonds; Hybridization - AP Chem Unit 2, Topic 7A",1191.6422119140625,-946.40234375,15.510031876992313
-"VSEPR Theory & Molecular Geometry - AP Chem Unit 2, Topic 7B",1147.4691162109375,-877.8849487304688,16.494468404275267
-"Intermolecular Forces - London dispersion forces - AP Chem Unit 3, Topic 1A",1004.8480834960938,-849.5390014648438,25.513782111381964
-"Types of Intermolecular Forces - AP Chem Unit 3, Topic 1B",1339.5924072265625,-979.4047241210938,17.260141258828675
-"Properties of Solids - AP Chem Unit 3, Topic 2",1111.634765625,-647.5776977539062,16.266329145571596
-"Solids, Liquids, & Gases - AP Chem Unit 3, Topic 3",1027.0087890625,-404.93353271484375,11.447277954872181
-"Boyle's Law, Charles' Law, Gay-Lussac's Law - AP Chem Unit 3, Topic 4A",669.5084838867188,-151.8515625,11.847302956434778
-"Ideal Gas Law PV=nRT - AP Chem Unit 3, Topic 4B",711.1509399414062,-212.63980102539062,13.82867679229952
-"Dalton's Law of Partial Pressures / Gas Laws - AP Chem Unit 3, Topic 4c",912.7005615234375,-293.5304260253906,12.872367022938935
-"Kinetic-Molecular Theory & Graham's Law - AP Chem Unit 3, Topic 5",822.1532592773438,-427.12548828125,12.67860491280705
-"Deviation from the Ideal Gas Law - AP Chem Unit 3, Topic 6",991.2051391601562,-182.52288818359375,12.619226201637602
-"Solutions and Mixtures - AP Chemistry Unit 3, Topic 7",299.1293640136719,-1019.4010620117188,13.456778548659292
-"Representations of Solutions - AP Chem Unit 3, Topic 8A",368.8703308105469,-1087.2991943359375,9.965935370960686
-"Electrolytes, Nonelectrolytes, & Dissociation into Ions - AP Chem Unit 3, Topic 8B",262.3048400878906,-1411.824951171875,8.7689855615976
-"Chromatography, Distillation, & Solubility - AP Chem Unit 3, Topics 9-10",739.3815307617188,-733.5557250976562,13.10363147696731
-"Waves, Light, and Photons - AP Chem Unit 3, Topic 11",707.872802734375,-809.6072998046875,11.825426589161822
-"The Nature of Light - Waves, Photons, & Energy - AP Chem Unit 3, Topic 12",688.4839477539062,-974.3094482421875,10.25657853615851
-"Spectrophotometry and the Beer-Lambert Law - AP Chem Unit 3, Topic 13",412.57440185546875,-1174.3897705078125,17.36952309519345
-"Introduction for Reactions & Equations - AP Chem Unit 4, Topics 1-2a",43.27448272705078,-1217.01318359375,13.406775423463968
-"Writing Net Ionic Equations - AP Chemistry Unit 4, Topic 2b",-107.88336944580078,-1055.1258544921875,13.347396712294518
-"Predicting Products of Reactions - AP Chem Unit 4, Topic 2c",-58.50586700439453,-807.1512451171875,7.434527157947372
-"Visually Representing Reactions / Physical vs Chemical Changes - AP Chem Unit 4, Topics 3-4",235.86215209960938,-724.3596801757812,6.359459966247891
-"Reaction Stoichiometry Made Easy - AP Chemistry Unit 4, Topic 5a",-6.790470123291016,-557.1492309570312,10.053440840052502
-"Stoichiometry Problems - Limiting Reactant & Percent Yield - AP Chem Unit 4, Topic 5b",76.05046081542969,-637.023193359375,9.878429901868866
-"Basics of Solution Stoichiometry - AP Chem Unit 4, Topic 5c",107.85968017578125,-889.8345947265625,7.650165635352209
-"Solving Problems With Solution Stoichiometry - AP Chem Unit 4, Topic 5d",93.71189880371094,-849.20263671875,6.771985749109319
-"Introduction to Titration - AP Chemistry Unit 4, Topic 6",-269.6658020019531,-1339.1956787109375,10.125320332520783
-"Types of Chemical Reactions - AP Chemistry Unit 4, Topic 7A",-282.8612365722656,-702.7188720703125,7.093880867554223
-"How to Determine Oxidation State for ANY Atom - AP Chem Unit 4, Topic 7b",-489.4325866699219,-969.8048706054688,7.878304894055878
-"Introduction to Acid-Base Chemistry - AP Chemistry Unit 4, Topic 8",-53.983192443847656,-1459.9007568359375,9.928433027064191
-"Introduction to Redox Reactions - AP Chem Unit 4, Topic 9A",558.7596435546875,400.8021240234375,9.869054315894743
-"Redox Reactions: Halogens, Disproportionation, & Acids - AP Chem Unit 4, Topic 9b",-208.25999450683594,-1078.752197265625,5.0
-"Balancing Oxidation-Reduction Reactions - AP Chem Unit 4, Topic 9c",-171.47972106933594,-807.8240356445312,6.309456841052565
-"Reaction Rates & Introduction to Kinetics - AP Chem Unit 5, Topic 1",-525.7155151367188,-143.5372772216797,24.53872117007313
-"Introduction to Rate Laws - AP Chem Unit 5, Topic 2",-401.5270690917969,-317.5920104980469,20.53847115444715
-"Concentration Changes Over Time - AP Chem Unit 5, Topic 3",-451.8421630859375,-404.3680114746094,18.335208450528157
-"How Reactions Happen: Steps, Collisions, & Energy - AP Chem Unit 5, Topics 4, 5, and 6",-272.6153869628906,-307.8843078613281,14.122445152822053
-"Reaction Mechanisms & Multistep Reactions - AP Chem Unit 5, Topics 7-10",-312.75689697265625,-489.468017578125,15.025626601662605
-"Catalysis in Chemical Reactions - AP Chem Unit 5, Topic 11",-603.0617065429688,-140.34454345703125,9.512782048878055
-Introduction to Thermodynamics - AP Chemistry Unit 6 Topic 1,244.31727600097656,-2.511752128601074,16.841365085317832
-"How Heat Flows in Chemical Systems - AP Chem Unit 6, Topics 2-3",258.5280456542969,-184.0593719482422,11.16601037564848
-"Calorimetry, Specific Heat Capacity, and Q=MCΔT - AP Chem Unit 6, Topic 4",349.59832763671875,87.81026458740234,15.181886367897993
-"Phase Changes and Energy - AP Chemistry Unit 6, Topic 5",348.312255859375,-127.2313232421875,10.90661916369773
-"How to Calculate Enthalpy of Reaction - AP Chem Unit 6, Topic 6a",21.08757781982422,-247.826171875,11.71604475279705
-"Problem Walkthroughs - Enthalpy of Reaction - AP Chem Unit 6, Topic 6b",32.30925750732422,-86.03626251220703,9.428401775110945
-"Calculating ΔH Using Bond Enthalpies - AP Chem Unit 6, Topic 7",-104.18336486816406,-47.79938507080078,9.681542596412276
-"Using Enthalpy of Formation to Calculate ΔH - AP Chem Unit 6, Topic 8",-156.16534423828125,-105.2678451538086,8.543971498218639
-"Hess's Law and ΔH - Let's Practice! AP Chemistry Unit 6, Topic 9",-68.73355102539062,63.377357482910156,8.003312707044191
-"What Is Equilibrium? AP Chemistry Unit 7, Topic 1 Daily Video",-671.628662109375,-338.3612365722656,14.928745546596662
-Writing an Equilibrium Constant Expression - AP Chem Unit 7 Topics 2-3 #apchem #apchemistry,806.4683837890625,397.5492858886719,11.637914869679356
-"Magnitude of the Equilibrium Constant - AP Chem Unit 7, Topics 4-5",-936.0753173828125,-658.1912841796875,10.68160510031877
-"Manipulating Reactions and Its Effect on the Equilibrium Constant - AP Chem Unit 7, Topic 6",-906.0999145507812,-459.92578125,10.140946309144322
-"Equilibrium Practice Problems - The ICE Box Method - AP Chem Unit 7, Topic 7a",-746.5079956054688,-703.3323974609375,13.17551096943559
-"Working With Very Small Equilibrium Constants - The 5% Rule - AP Chem Unit 7, Topic 7b #apchem",-642.1842041015625,-577.7832641601562,9.500281267579224
-"Representations of Equilibrium - AP Chem Unit 7, Topic 8",-793.9075927734375,-436.86102294921875,8.084567785486593
-"Le Chatelier's Principle - AP Chemistry Unit 7, Topic 9 #apchem #apchemistry #equilibriumchemistry",-877.857421875,-207.16680908203125,12.63797737358585
-"Reaction Quotient & Le Chatelier's Principle - AP Chem Unit 7, Topic 10",-999.2740478515625,-359.05615234375,9.790924432777048
-"Introduction to Solubility Equilibria - AP Chem Unit 7, Topic 11a #apchemistry",-508.74615478515625,-1033.8787841796875,16.047565472842052
-Solubility Product Constant Problems - Let's Practice! AP Chem Unit 7 Topic 11b #solubilityproduct,-549.0181274414062,-868.503173828125,10.706606662916432
-"Common-Ion Effect & Final Equilibrium Topics - AP Chem Unit 7, Topics 12-14",-446.2817687988281,-720.8614501953125,11.55978498656166
-"Acids, Bases, and the pH Concept - AP Chem Unit 8, Topic 1a",-434.6046447753906,-1849.8218994140625,22.110444402775173
-"Calculations With pH and pOH - AP Chemistry Unit 8, Topic 1B",-300.5946960449219,-1485.63134765625,14.334958434902182
-"How to Calculate pH & pOH for Strong Acids & Bases - AP Chem Unit 8, Topic 2",-349.9577331542969,-1749.4439697265625,15.110006875429715
-"Let's Solve Weak Acid Problems! - AP Chemistry Unit 8, Topic 3a",-291.27789306640625,-1724.1163330078125,16.91949496843553
-"Weak Acids - Problem Walkthroughs - AP Chem Unit 8, Topic 3b",-35.175086975097656,-1643.85009765625,13.225514094630915
-"Let's Solve Weak Base Problems! - AP Chem Unit 8, Topic 3c",-161.95297241210938,-1884.759765625,11.922307644227764
-"Acid-Base Reactions and pH Calculations - AP Chem Unit 8, Topic 4",-140.31703186035156,-1653.1778564453125,21.922932683292707
-"Acid-Base Titrations - What You Should Know - AP Chem Unit 8, Topic 5a",-514.9308471679688,-1614.7125244140625,19.32589536846053
-"Analyzing Titrations of Weak Acids & Strong Bases - AP Chem Unit 8, Topic 5b",633.5025634765625,554.3394775390625,15.475654728420526
-"Special Types of Acid-Base Titrations - AP Chem Unit 8, Topic 5c",-405.4315185546875,-1376.9493408203125,12.844240265016564
-"Molecular Structure of Acids and Bases - AP Chem Unit 8, Topic 6",58.90361785888672,-1759.3878173828125,13.375523470216889
-"pH and pKa - Analyzing Titration Curves - AP Chem Unit 8, Topic 7",-637.4722900390625,-1677.24462890625,15.819426214138383
-"What You Need to Know About Buffers - AP Chem Unit 8, Topics 8-10",-573.1563720703125,-1359.666748046875,33.15488468029252
-"What You Need to Know About Entropy - AP Chem Unit 9, Topic 1",-290.43646240234375,287.8348388671875,13.894305894118382
-"How to Calculate ΔS Change in Entropy - AP Chem Unit 9, Topic 2",-403.13226318359375,150.17379760742188,10.27220451278205
-"How to Tell If a Process Is Thermodynamically-Favored - AP Chem Unit 9, Topic 3a",755.448974609375,478.07403564453125,10.684730295643478
-"How to Calculate ΔG Gibbs Free Energy - AP Chem Unit 9, Topic 3b",-202.9653778076172,412.50323486328125,11.259766235389712
-"Kinetic Control - ΔG and the Equilibrium Constant - AP Chem Unit 9, Topics 4-5",-553.7887573242188,223.19699096679688,10.86599162447653
-"Calculating ΔG with Thermodynamic Coupling - AP Chem Unit 9, Topic 6",-355.94793701171875,117.58126068115234,9.869054315894743
-"Electrochemistry and Galvanic Cells - AP Chem Unit 9, Topic 7a",72.96598052978516,333.60491943359375,16.416338521157574
-"Electrochemistry and Galvanic Cells - Practice Problems - AP Chem Unit 9, Topic 7b",131.43019104003906,489.581298828125,13.128633039564972
-"Electrochemistry - Cell Potential and ΔG - AP Chem Unit 9, Topic 8",333.95697021484375,548.6607055664062,11.60353772110757
-"The Nernst Equation and Nonstandard Conditions - AP Chem Unit 9, Topic 9",199.9565887451172,273.43310546875,11.753547096693545
-"Electrolysis and Faraday's Law Practice Problems - AP Chem Unit 9, Topic 10",76.6466064453125,-377.23236083984375,12.200450028126758
+x,y,z,cluster,Label
+6900.4966,-2401.9822,60.0,4,"Introduction to Moles - AP Chem Unit 1, Topic 1a"
+6632.9067,-2218.6519,13.181761360085005,4,"Molar Mass and its Applications - AP Chem Unit 1, Topic 1b"
+6981.5083,-2830.8523,16.117569848115508,4,"Isotopes, Atomic Mass, & Mass Spectroscopy - AP Chem Unit 1, Topic 2"
+7203.1963,-2515.0344,13.281455090943185,4,"Composition of Pure Substances - AP Chem Unit 1, Topic 3"
+7172.062,-2828.1562,13.986186636664792,4,"Composition of Mixtures - AP Chem, Unit 1, Topic 4"
+2546.8357,1272.642,12.287955497218576,2,"Atomic Structure & Coulomb's Law - AP Chem Unit 1, Topic 5a"
+2706.7424,1460.7043,11.318519907494219,2,"Electron Configurations - AP Chem Unit 1, Topic 5b"
+2849.657,1606.9128,21.205387836739796,2,"Photoelectron Spectroscopy - AP Chem Unit 1, Topic 6"
+3035.6328,1298.5425,14.364335270954435,2,"Periodic Trends: Ionization Energy - AP Chem Unit 1, Topic 7a"
+2825.2427,954.3528,9.50684417776111,2,"Periodic Trends: Atomic Radius & Ionic Radius - AP Chem Unit 1, Topic 7b"
+2843.4866,1041.2715,7.550784424026501,2,"Periodic Trends: Electronegativity - AP Chem Unit 1, Topic 7c"
+2858.6196,1236.0682,7.292955809738109,2,"Valence Electrons & Ionic Compounds - AP Chem Unit 1, Topic 8"
+2209.179,1234.3612,20.92349521845115,2,"Types of Chemical Bonds - AP Chem Unit 2, Topic 1"
+2206.52,853.27997,16.041940121257575,2,"Energy, Ionic Solids, Metals, & Alloys - AP Chem Unit 2, Topics 2-4"
+2273.6829,1659.3997,11.569473092068254,2,"Lewis Electron-Dot Diagrams - AP Chem Unit 2, Topic 5A"
+2338.2124,1413.714,9.977811113194575,2,"Exceptions to the Octet Rule - AP Chem Unit 2, Topic 5B"
+2356.775,1576.4229,13.40865054065879,2,"Resonance and Formal Charge - AP Chem Unit 2, Topic 6"
+2031.3431,1647.3762,16.561035064691545,2,"Sigma & Pi Bonds; Hybridization - AP Chem Unit 2, Topic 7A"
+1987.1177,1461.6124,17.643915244702796,2,"VSEPR Theory & Molecular Geometry - AP Chem Unit 2, Topic 7B"
+1674.0305,1272.4507,27.565160322520157,2,"Intermolecular Forces - London dispersion forces - AP Chem Unit 3, Topic 1A"
+1960.571,1160.9863,18.486155384711545,2,"Types of Intermolecular Forces - AP Chem Unit 3, Topic 1B"
+1777.2615,1123.0596,17.39296206012876,2,"Properties of Solids - AP Chem Unit 3, Topic 2"
+7740.4575,-2395.5542,12.092005750359398,4,"Solids, Liquids, & Gases - AP Chem Unit 3, Topic 3"
+7781.2563,-2289.87,12.532033252078255,4,"Boyle's Law, Charles' Law, Gay-Lussac's Law - AP Chem Unit 3, Topic 4A"
+7409.4805,-2081.3416,14.71154447152947,4,"Ideal Gas Law PV=nRT - AP Chem Unit 3, Topic 4B"
+7619.403,-2374.235,13.659603725232827,4,"Dalton's Law of Partial Pressures / Gas Laws - AP Chem Unit 3, Topic 4c"
+7614.3047,-2054.9092,13.446465404087755,4,"Kinetic-Molecular Theory & Graham's Law - AP Chem Unit 3, Topic 5"
+7596.782,-2187.6353,13.381148821801363,4,"Deviation from the Ideal Gas Law - AP Chem Unit 3, Topic 6"
+6409.8823,-2614.995,14.30245640352522,4,"Solutions and Mixtures - AP Chemistry Unit 3, Topic 7"
+6691.4893,-2816.3306,10.462528908056754,4,"Representations of Solutions - AP Chem Unit 3, Topic 8A"
+1912.358,991.62555,9.14588411775736,2,"Electrolytes, Nonelectrolytes, & Dissociation into Ions - AP Chem Unit 3, Topic 8B"
+7501.002,-2825.925,13.913994624664042,4,"Chromatography, Distillation, & Solubility - AP Chem Unit 3, Topics 9-10"
+2105.457,1908.2368,12.507969248078005,2,"Waves, Light, and Photons - AP Chem Unit 3, Topic 11"
+2341.6873,1967.3235,10.782236389774361,2,"The Nature of Light - Waves, Photons, & Energy - AP Chem Unit 3, Topic 12"
+6883.1553,-2885.8423,18.606475404712796,4,"Spectrophotometry and the Beer-Lambert Law - AP Chem Unit 3, Topic 13"
+299.5424,1712.1168,14.247452965810362,0,"Introduction for Reactions & Equations - AP Chem Unit 4, Topics 1-2a"
+690.6772,1567.7269,14.18213638352397,0,"Writing Net Ionic Equations - AP Chemistry Unit 4, Topic 2b"
+483.66547,1539.3892,7.6779798737421086,0,"Predicting Products of Reactions - AP Chem Unit 4, Topic 2c"
+7306.442,-2543.071,6.49540596287268,4,"Visually Representing Reactions / Physical vs Chemical Changes - AP Chem Unit 4, Topics 3-4"
+6851.6504,-2172.9387,10.558784924057754,4,"Reaction Stoichiometry Made Easy - AP Chemistry Unit 4, Topic 5a"
+6463.7246,-2006.0953,10.366272892055754,4,"Stoichiometry Problems - Limiting Reactant & Percent Yield - AP Chem Unit 4, Topic 5b"
+6428.26,-2566.9592,7.915182198887431,4,"Basics of Solution Stoichiometry - AP Chem Unit 4, Topic 5c"
+6693.429,-2236.993,6.949184324020251,4,"Solving Problems With Solution Stoichiometry - AP Chem Unit 4, Topic 5d"
+42.529716,7117.2437,10.637852365772861,3,"Introduction to Titration - AP Chemistry Unit 4, Topic 6"
+1030.266,2332.9165,7.303268954309644,0,"Types of Chemical Reactions - AP Chemistry Unit 4, Topic 7A"
+668.1003,2221.1365,8.166135383461466,0,"How to Determine Oxidation State for ANY Atom - AP Chem Unit 4, Topic 7b"
+-163.63838,6168.3643,10.421276329770611,3,"Introduction to Acid-Base Chemistry - AP Chemistry Unit 4, Topic 8"
+1008.8112,2007.535,10.355959747484217,0,"Introduction to Redox Reactions - AP Chem Unit 4, Topic 9A"
+324.17715,2129.4421,5.0,0,"Redox Reactions: Halogens, Disproportionation, & Acids - AP Chem Unit 4, Topic 9b"
+426.7352,2062.6462,6.440402525157823,0,"Balancing Oxidation-Reduction Reactions - AP Chem Unit 4, Topic 9c"
+2277.6719,36.78621,26.49259328708044,1,"Reaction Rates & Introduction to Kinetics - AP Chem Unit 5, Topic 1"
+1799.2441,-226.44878,22.09231826989187,1,"Introduction to Rate Laws - AP Chem Unit 5, Topic 2"
+2053.6719,29.817495,19.668729295580974,1,"Concentration Changes Over Time - AP Chem Unit 5, Topic 3"
+2165.6716,28.336607,15.034689668104255,1,"How Reactions Happen: Steps, Collisions, & Energy - AP Chem Unit 5, Topics 4, 5, and 6"
+1817.7456,162.00977,16.028189261828864,1,"Reaction Mechanisms & Multistep Reactions - AP Chem Unit 5, Topics 7-10"
+1744.8475,-71.764946,9.96406025376586,1,"Catalysis in Chemical Reactions - AP Chem Unit 5, Topic 11"
+3215.902,174.5803,18.02550159384962,1,Introduction to Thermodynamics - AP Chemistry Unit 6 Topic 1
+3203.5999,-83.217255,11.782611413213326,1,"How Heat Flows in Chemical Systems - AP Chem Unit 6, Topics 2-3"
+3058.388,262.64667,16.20007500468779,1,"Calorimetry, Specific Heat Capacity, and Q=MCΔT - AP Chem Unit 6, Topic 4"
+3087.3838,115.169624,11.497281080067504,1,"Phase Changes and Energy - AP Chemistry Unit 6, Topic 5"
+2916.6763,241.99252,12.387649228076755,1,"How to Calculate Enthalpy of Reaction - AP Chem Unit 6, Topic 6a"
+2734.245,2.499447,9.87124195262204,1,"Problem Walkthroughs - Enthalpy of Reaction - AP Chem Unit 6, Topic 6b"
+2639.1145,269.15085,10.149696856053504,1,"Calculating ΔH Using Bond Enthalpies - AP Chem Unit 6, Topic 7"
+2997.5117,536.8669,8.898368648040503,1,"Using Enthalpy of Formation to Calculate ΔH - AP Chem Unit 6, Topic 8"
+2620.4944,482.82523,8.30364397774861,1,"Hess's Law and ΔH - Let's Practice! AP Chemistry Unit 6, Topic 9"
+2208.9854,-412.67426,15.921620101256329,1,"What Is Equilibrium? AP Chemistry Unit 7, Topic 1 Daily Video"
+2220.1,-799.13477,12.30170635664729,1,Writing an Equilibrium Constant Expression - AP Chem Unit 7 Topics 2-3 #apchem #apchemistry
+2007.3684,-640.06665,11.249765610350646,1,"Magnitude of the Equilibrium Constant - AP Chem Unit 7, Topics 4-5"
+2281.5142,-671.04706,10.655040940058754,1,"Manipulating Reactions and Its Effect on the Equilibrium Constant - AP Chem Unit 7, Topic 6"
+1861.2697,-488.4489,13.99306206637915,1,"Equilibrium Practice Problems - The ICE Box Method - AP Chem Unit 7, Topic 7a"
+1829.9435,-466.81723,9.950309394337147,1,"Working With Very Small Equilibrium Constants - The 5% Rule - AP Chem Unit 7, Topic 7b #apchem"
+1719.8999,-637.1483,8.393024564035253,1,"Representations of Equilibrium - AP Chem Unit 7, Topic 8"
+2246.3743,-419.56262,13.401775110944435,1,"Le Chatelier's Principle - AP Chemistry Unit 7, Topic 9 #apchem #apchemistry #equilibriumchemistry"
+1941.6519,-971.221,10.270016876054754,1,"Reaction Quotient & Le Chatelier's Principle - AP Chem Unit 7, Topic 10"
+2060.639,252.04182,17.152322020126256,1,"Introduction to Solubility Equilibria - AP Chem Unit 7, Topic 11a #apchemistry"
+2218.958,-800.66,11.277267329208076,1,Solubility Product Constant Problems - Let's Practice! AP Chem Unit 7 Topic 11b #solubilityproduct
+2216.7356,225.77461,12.215763485217826,1,"Common-Ion Effect & Final Equilibrium Topics - AP Chem Unit 7, Topics 12-14"
+-624.65845,6469.9243,23.82148884305269,3,"Acids, Bases, and the pH Concept - AP Chem Unit 8, Topic 1a"
+-931.2762,6630.91,15.268454278392399,3,"Calculations With pH and pOH - AP Chemistry Unit 8, Topic 1B"
+-762.2772,6640.557,16.121007562972686,3,"How to Calculate pH & pOH for Strong Acids & Bases - AP Chem Unit 8, Topic 2"
+-776.07404,5989.3354,18.111444465279078,3,"Let's Solve Weak Acid Problems! - AP Chemistry Unit 8, Topic 3a"
+-540.36334,6049.3477,14.048065504094005,3,"Weak Acids - Problem Walkthroughs - AP Chem Unit 8, Topic 3b"
+-696.1495,5769.5605,12.61453840865054,3,"Let's Solve Weak Base Problems! - AP Chem Unit 8, Topic 3c"
+-351.51453,6275.4946,23.615225951621973,3,"Acid-Base Reactions and pH Calculations - AP Chem Unit 8, Topic 4"
+-53.27648,6798.0557,20.75848490530658,3,"Acid-Base Titrations - What You Should Know - AP Chem Unit 8, Topic 5a"
+195.66711,6746.5283,16.523220201262582,3,"Analyzing Titrations of Weak Acids & Strong Bases - AP Chem Unit 8, Topic 5b"
+-380.4698,7047.5757,13.62866429151822,3,"Special Types of Acid-Base Titrations - AP Chem Unit 8, Topic 5c"
+-497.31912,5898.045,14.213075817238577,3,"Molecular Structure of Acids and Bases - AP Chem Unit 8, Topic 6"
+-31.63233,6806.5884,16.90136883555222,3,"pH and pKa - Analyzing Titration Curves - AP Chem Unit 8, Topic 7"
+-374.8541,6564.262,35.97037314832177,3,"What You Need to Know About Buffers - AP Chem Unit 8, Topics 8-10"
+3202.9966,-544.8473,14.783736483530221,1,"What You Need to Know About Entropy - AP Chem Unit 9, Topic 1"
+2882.361,-405.04642,10.799424964060254,1,"How to Calculate ΔS Change in Entropy - AP Chem Unit 9, Topic 2"
+2717.6646,-665.1636,11.253203325207826,1,"How to Tell If a Process Is Thermodynamically-Favored - AP Chem Unit 9, Topic 3a"
+2642.282,-253.0411,11.885742858928683,1,"How to Calculate ΔG Gibbs Free Energy - AP Chem Unit 9, Topic 3b"
+2427.088,-445.10144,11.452590786924183,1,"Kinetic Control - ΔG and the Equilibrium Constant - AP Chem Unit 9, Topics 4-5"
+2748.6729,-126.950424,10.355959747484217,1,"Calculating ΔG with Thermodynamic Coupling - AP Chem Unit 9, Topic 6"
+649.7458,2389.3792,17.55797237327333,0,"Electrochemistry and Galvanic Cells - AP Chem Unit 9, Topic 7a"
+383.3288,2630.986,13.94149634352147,0,"Electrochemistry and Galvanic Cells - Practice Problems - AP Chem Unit 9, Topic 7b"
+2533.0422,-45.963375,12.263891493218326,1,"Electrochemistry - Cell Potential and ΔG - AP Chem Unit 9, Topic 8"
+2336.0344,53.980907,12.428901806362898,1,"The Nernst Equation and Nonstandard Conditions - AP Chem Unit 9, Topic 9"
+2283.6345,228.60773,12.920495030939433,1,"Electrolysis and Faraday's Law Practice Problems - AP Chem Unit 9, Topic 10"
