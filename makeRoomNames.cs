@@ -10,7 +10,7 @@ public class HouseNames : MonoBehaviour
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
     public string duplicateLayerName = "MiniMapOnly"; // Name of the layer for duplicates
 
-    private const string OpenAIAPIKey = "api";
+    private const string OpenAIAPIKey = "api-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
@@ -74,6 +74,8 @@ public class HouseNames : MonoBehaviour
 
             // Generate puzzle room name based on transcript
             yield return StartCoroutine(MakeName(transcript, i));
+
+            yield return new WaitForSeconds(2f);
         }
     }
 
@@ -158,8 +160,8 @@ public class HouseNames : MonoBehaviour
         // Display puzzle room name at the corresponding coordinates from CSV 2
         if (vidCords.parsedData[rowIndex].Length >= 4)
         {
-            if (float.TryParse(vidCords.parsedData[rowIndex][1], out float x) &&
-                float.TryParse(vidCords.parsedData[rowIndex][2], out float z))
+            if (float.TryParse(vidCords.parsedData[rowIndex][0], out float x) &&
+                float.TryParse(vidCords.parsedData[rowIndex][1], out float z))
             {
                 // Create a TextMeshPro object to display the name
                 GameObject nameObject = new GameObject("PuzzleRoomName");
@@ -277,4 +279,3 @@ public class CSVData
     public TextAsset csvFile;
     public List<string[]> parsedData;
 }
-
