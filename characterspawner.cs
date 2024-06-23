@@ -9,8 +9,8 @@ public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab;
     [SerializeField] private GameObject uiCanvasPrefab;
-    [SerializeField] private TextAsset coordinatesCsvFile;
-    [SerializeField] private TextAsset transcriptsCsvFile;
+    [SerializeField] public TextAsset coordinatesCsvFile;
+    [SerializeField] public TextAsset transcriptsCsvFile;
     [SerializeField] private Terrain terrain; // Reference to the Terrain component
     [SerializeField] private MapGenerator mapGenerator; // Reference to MapGenerator script
 
@@ -22,6 +22,10 @@ public class CharacterSpawner : MonoBehaviour
     }
 
     private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
+    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
+
+    // Public property to access the masteredTopics dictionary
+    public Dictionary<string, bool> MasteredTopics => masteredTopics;
 
     void Start()
     {
@@ -58,18 +62,20 @@ public class CharacterSpawner : MonoBehaviour
 
         foreach (var coordinate in coordinates)
         {
-            if (transcripts.TryGetValue(coordinate.Label, out string transcript))
+            string trimmedLabel = coordinate.Label.Trim(); // Trim the label to ensure consistency
+
+            if (transcripts.TryGetValue(trimmedLabel, out string transcript))
             {
                 topics.Add(new TopicInfo
                 {
                     Position = new Vector3(coordinate.Position.x, coordinate.Position.z, coordinate.Position.y),
-                    Label = coordinate.Label,
+                    Label = trimmedLabel,
                     Transcript = transcript
                 });
             }
             else
             {
-                Debug.LogWarning($"No transcript found for label: {coordinate.Label}");
+                Debug.LogWarning($"No transcript found for label: {trimmedLabel}");
             }
         }
 
@@ -97,12 +103,12 @@ public class CharacterSpawner : MonoBehaviour
 
                 if (values.Length >= 4)
                 {
-                    if (float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                    if (float.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
                         float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
-                        float.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+                        float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
                     {
                         Vector3 position = new Vector3(x, y, z);
-                        string label = values[0].Trim('"');
+                        string label = values[4].Trim('"');
                         coordinates.Add((label, position));
                         Debug.Log($"Parsed coordinate: {label} at position: {position}");
                     }
@@ -140,10 +146,10 @@ public class CharacterSpawner : MonoBehaviour
 
                 if (values.Length >= 2)
                 {
-                    string label = values[0].Trim('"');
-                    string transcript = values[1].Trim('"');
+                    string label = values[0].Trim().Trim('"'); // Trim whitespace and quotes
+                    string transcript = values[3].Trim().Trim('"');
                     transcripts[label] = transcript;
-                    Debug.Log($"Parsed transcript for label: {label}");
+                    Debug.Log($"Parsed transcript for label: {label} - {transcript}");
                 }
                 else
                 {
@@ -184,13 +190,13 @@ public class CharacterSpawner : MonoBehaviour
 
             character.name = topic.Label;
 
-        
+
 
             // Position the UI Canvas slightly in front of the character
             Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
             GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
 
-            
+
 
             Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
             canvasComponent.renderMode = RenderMode.WorldSpace;
@@ -220,7 +226,7 @@ public class CharacterSpawner : MonoBehaviour
 
         Vector3 houseDimensions = GetHouseDimensions();
 
-        float zOffset = houseDimensions.z / 2 + 1f;
+        float zOffset = houseDimensions.z + 1f;
 
         // Get the terrain height at the original position
         float terrainHeight = terrain.SampleHeight(new Vector3(position.x, 0, position.z));
@@ -309,21 +315,6 @@ public class CharacterSpawner : MonoBehaviour
         else
         {
             Debug.LogWarning("No TMP_Text found in the UI Canvas.");
-        }
-
-        if (submitButton != null)
-        {
-            characterAI.submitButton = submitButton;
-            // Manually set the position and size of the button
-            RectTransform buttonRect = submitButton.GetComponent<RectTransform>();
-            buttonRect.anchoredPosition = new Vector2(0, -100); // Adjust position
-            buttonRect.sizeDelta = new Vector2(200, 50); // Adjust size
-            submitButton.onClick.AddListener(characterAI.OnAskQuestion);
-            Debug.Log("Submit button assigned.");
-        }
-        else
-        {
-            Debug.LogWarning("No Button found in the UI Canvas.");
         }
     }
 
