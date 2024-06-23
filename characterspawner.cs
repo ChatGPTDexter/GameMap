@@ -68,7 +68,7 @@ public class CharacterSpawner : MonoBehaviour
             {
                 topics.Add(new TopicInfo
                 {
-                    Position = new Vector3(coordinate.Position.x, coordinate.Position.z, coordinate.Position.y),
+                    Position = new Vector3(coordinate.Position.x, coordinate.Position.y, coordinate.Position.z),
                     Label = trimmedLabel,
                     Transcript = transcript
                 });
@@ -104,8 +104,8 @@ public class CharacterSpawner : MonoBehaviour
                 if (values.Length >= 4)
                 {
                     if (float.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                        float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
-                        float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+                        float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
+                        float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
                     {
                         Vector3 position = new Vector3(x, y, z);
                         string label = values[4].Trim('"');
