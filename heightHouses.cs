@@ -97,8 +97,8 @@ public class MapGenerator : MonoBehaviour
                 continue;
             }
 
-            if (float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
             {
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;
@@ -216,10 +216,10 @@ public class MapGenerator : MonoBehaviour
                 continue;
             }
 
-            string label = fields[0].Trim('"'); // Trim quotes from the label
-            if (float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
-                float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+            string label = fields[4].Trim('"'); // Trim quotes from the label
+            if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
+                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
             {
                 Vector3 position = new Vector3(x, y, z);
                 housePositions[label] = position;
@@ -384,7 +384,7 @@ public class MapGenerator : MonoBehaviour
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
         // Increase the radius for wider mounds
-        int radius = CalculateAdjustedDistance(position); 
+        int radius = CalculateAdjustedDistance(position);
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -419,7 +419,7 @@ public class MapGenerator : MonoBehaviour
         terrainData.SetHeights(startX, startZ, heights);
         Debug.Log("Terrain elevation applied");
     }
-    
+
 
     void AddTerrainLayer()
     {
@@ -463,7 +463,7 @@ public class MapGenerator : MonoBehaviour
     {
         float maxDistance = radius;
         float falloffExponent = 0.2f; // Even lower value for more gradual falloff
-        
+
         // Remove plateau effect for smoother mounds
         float falloff = Mathf.Pow(1 - Mathf.Clamp01(distance / maxDistance), falloffExponent);
 
