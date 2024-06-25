@@ -3,6 +3,18 @@ using System;
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
+using TMPro;
+
+[System.Serializable]
+public class Biome
+{
+    public string name;
+    public Texture2D terrainTexture;
+    public Vector2 textureOffset;
+    public Vector2 textureTiling;
+    public List<GameObject> treePrefabs;
+    public List<GameObject> rockPrefabs;
+}
 
 public class MapGenerator : MonoBehaviour
 {
@@ -10,29 +22,25 @@ public class MapGenerator : MonoBehaviour
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public List<GameObject> housePrefabs; // Assign multiple house prefabs here
     public GameObject roadPrefab; // Assign your road prefab here
-    public List<GameObject> treePrefabs; // Assign tree prefabs here
-    public List<GameObject> rockPrefabs; // Assign rock prefabs here
+    public List<Biome> biomes; // Assign biomes here
     public Terrain terrain; // Assign the Terrain object here in the Inspector
     public float elevationFactor = 0.01f; // Factor to control terrain elevation
     public Material roadMaterial; // Assign the material for the roads here
-    public int numTrees = 100; // Number of trees to spawn
-    public int numRocks = 50; // Number of rocks to spawn
-    public Texture2D textureToAdd; // The new texture layer to add
-    public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
-    public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
     public GameObject waterPrefab; // Assign the water prefab here
     public float waterHeight = 2f; // Height of the water
     public float checkRadius = 10f; // Radius to check for nearby houses
 
+    public GameObject cubePrefab; // Assign the cube prefab here
+    public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
+    public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
+    private Dictionary<int, List<Vector3>> clusters = new Dictionary<int, List<Vector3>>(); // Store clusters
+    private Dictionary<int, Biome> clusterBiomes = new Dictionary<int, Biome>(); // Store assigned biomes for each cluster
     private float[,] originalHeights; // Store original terrain heights
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
-
-    private Camera miniMapCamera; // Mini-map camera
-    private GameObject miniMapUI; // Mini-map UI element
-    private bool isMiniMapVisible = false; // Toggle for mini-map visibility
+    public bool canclearmap = true;
 
     void Start()
     {
@@ -50,6 +58,12 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
+        if (biomes == null || biomes.Count == 0)
+        {
+            Debug.LogError("Biomes not assigned. Please assign biomes in the Inspector.");
+            return;
+        }
+
         if (terrain == null)
         {
             Debug.LogError("Terrain not assigned. Please assign Terrain in the Inspector.");
@@ -60,11 +74,13 @@ public class MapGenerator : MonoBehaviour
         AdjustTerrainSize();
         originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
         GenerateMapFromCSV();
-        AddTerrainLayer();
+        AssignBiomesToClusters();
+        ApplyBiomeTextures();
         SpawnTreesAndRocks();
         RemoveTreesBelowHeight(3f);
         PlaceWater(); // Add water layer
-        SetupMiniMap(); // Setup the mini-map camera and UI
+        InstantiateHouses(); // Instantiate and position the houses after terrain generation
+        SetupMiniMap(); // Setup the mini-map
     }
 
     void CalculateTerrainSize()
@@ -95,8 +111,8 @@ public class MapGenerator : MonoBehaviour
                 continue;
             }
 
-            if (float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
             {
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;
@@ -195,6 +211,10 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
+        // Clear existing house positions
+        housePositions.Clear();
+        clusters.Clear();
+
         while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
@@ -205,39 +225,26 @@ public class MapGenerator : MonoBehaviour
 
             string[] fields = ParseCSVLine(line);
 
-            if (fields.Length < 4)
+            if (fields.Length < 5)
             {
                 Debug.LogWarning($"Skipping invalid row: {line}");
                 continue;
             }
 
-            string label = fields[0].Trim('"'); // Trim quotes from the label
-            if (float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
-                float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+            string label = fields[4].Trim('"'); // Trim quotes from the label
+            if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
+                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
+                int.TryParse(fields[3], out int clusterId)) // Read cluster ID
             {
                 Vector3 position = new Vector3(x, y, z);
                 housePositions[label] = position;
 
-                try
+                if (!clusters.ContainsKey(clusterId))
                 {
-                    // Elevate terrain around the position
-                    ElevateTerrainAround(position);
-                    float terrainHeight = terrain.SampleHeight(position);
-
-                    // Ensure the house is above the terrain
-                    position.y = terrainHeight + 0.1f;
-
-                    // Instantiate the house prefab at the adjusted height with bottom aligned
-                    GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                    float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
-                    Instantiate(housePrefab, new Vector3(position.x, position.y + (houseHeight / 2), position.z), Quaternion.identity);
-                    Debug.Log($"Spawning house at y={position.y + (houseHeight / 2)}");
+                    clusters[clusterId] = new List<Vector3>();
                 }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Error adjusting terrain at position {position}: {ex.Message}");
-                }
+                clusters[clusterId].Add(position);
             }
             else
             {
@@ -245,62 +252,17 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
+        foreach (var cluster in clusters)
+        {
+            foreach (var position in cluster.Value)
+            {
+                ElevateTerrainAround(position);
+            }
+        }
+
+        // Generate roads after terrain modification
         GenerateRoadsFromMST();
     }
-
-
-    float GetHighestNearbyHouseY(Vector3 position)
-    {
-        float highestY = position.y;
-        foreach (Vector3 housePosition in housePositions.Values)
-        {
-            if (Vector3.Distance(position, housePosition) < checkRadius && housePosition.y > highestY)
-            {
-                highestY = housePosition.y;
-            }
-        }
-        return highestY;
-    }
-
-    void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
-    {
-        TerrainData terrainData = terrain.terrainData;
-        Vector3 terrainPos = terrain.transform.position;
-
-        int xResolution = terrainData.heightmapResolution;
-        int zResolution = terrainData.heightmapResolution;
-
-        // Convert position to terrain coordinates
-        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
-        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
-
-        // Define the area around the position to check and adjust
-        int radius = 50; // Increase the radius for smoother transition
-        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
-        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
-        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
-        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
-
-        // Get the current heights in the area
-        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
-
-        // Adjust terrain heights with smooth transition
-        for (int x = 0; x < heights.GetLength(0); x++)
-        {
-            for (int z = 0; z < heights.GetLength(1); z++)
-            {
-                float terrainHeight = heights[x, z] * terrainData.size.y + terrainPos.y;
-                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
-                float falloff = Mathf.Clamp01(1 - (distance / radius));
-
-                heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
-            }
-        }
-
-        // Set the modified heights back to the terrain
-        terrainData.SetHeights(startX, startZ, heights);
-    }
-
 
     void ElevateTerrainAround(Vector3 position)
     {
@@ -316,8 +278,8 @@ public class MapGenerator : MonoBehaviour
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
-        // Define the area around the position to elevate
-        int radius = 50; // Increase the radius to create larger mounds
+        // Increase the radius for wider mounds
+        int radius = 20;
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -328,8 +290,8 @@ public class MapGenerator : MonoBehaviour
         // Get the current heights
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
-        // Calculate maximum elevation based on elevation factor
-        float maxElevation = Mathf.Min(45f, position.y * elevationFactor) / terrainData.size.y;
+        // Calculate maximum elevation based on z-coordinate from CSV
+        float maxElevation = position.y / terrainData.size.y;
 
         // Calculate falloff based on distance from the center
         for (int x = 0; x < heights.GetLength(0); x++)
@@ -342,6 +304,7 @@ public class MapGenerator : MonoBehaviour
                 // Calculate height increment based on maximum elevation and falloff
                 float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
 
+                // Apply the height increment to the current height
                 heights[x, z] += heightIncrement;
             }
         }
@@ -351,64 +314,91 @@ public class MapGenerator : MonoBehaviour
         Debug.Log("Terrain elevation applied");
     }
 
-
-    void AddTerrainLayer()
+    float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
-        if (terrain == null || textureToAdd == null)
+        float maxDistance = radius;
+        float falloffExponent = 0.2f; // Lower value for more gradual falloff
+
+        // Calculate falloff effect
+        float falloff = Mathf.Pow(1 - Mathf.Clamp01(distance / maxDistance), falloffExponent);
+
+        // Calculate height increment with falloff effect
+        float heightIncrement = maxElevation * falloff;
+
+        return heightIncrement;
+    }
+
+    void AssignBiomesToClusters()
+    {
+        System.Random random = new System.Random();
+        List<Biome> availableBiomes = new List<Biome>(biomes);
+
+        foreach (var cluster in clusters)
         {
-            Debug.LogError("Terrain or texture to add not assigned.");
-            return;
+            int biomeIndex = random.Next(availableBiomes.Count);
+            Biome biome = availableBiomes[biomeIndex];
+            clusterBiomes[cluster.Key] = biome;
+
+            // Remove biome from the list if you want unique biomes per cluster
+            availableBiomes.RemoveAt(biomeIndex);
         }
+    }
 
-        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+    void ApplyBiomeTextures()
+    {
+        TerrainData terrainData = terrain.terrainData;
+        List<TerrainLayer> terrainLayers = new List<TerrainLayer>(terrainData.terrainLayers);
 
-        // Check if the texture layer already exists
-        foreach (TerrainLayer layer in terrainLayers)
+        foreach (var cluster in clusters)
         {
-            if (layer.diffuseTexture == textureToAdd)
+            Biome biome = clusterBiomes[cluster.Key];
+            TerrainLayer newLayer = new TerrainLayer
             {
-                Debug.LogWarning("Texture layer already exists on the terrain.");
-                return;
+                diffuseTexture = biome.terrainTexture,
+                tileSize = biome.textureTiling,
+                tileOffset = biome.textureOffset
+            };
+            terrainLayers.Add(newLayer);
+
+            foreach (var position in cluster.Value)
+            {
+                ApplyTextureToTerrain(position, newLayer);
             }
         }
 
-        // Create a new terrain layer with the provided texture
-        TerrainLayer newLayer = new TerrainLayer
-        {
-            diffuseTexture = textureToAdd,
-            tileSize = textureTiling,
-            tileOffset = textureOffset
-        };
-
-        // Add the new layer to the list of terrain layers
-        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
-        newLayersList.Add(newLayer);
-
-        // Update the terrain's terrain layers
-        terrain.terrainData.terrainLayers = newLayersList.ToArray();
-
-        Debug.Log("Terrain layer added successfully.");
+        terrainData.terrainLayers = terrainLayers.ToArray();
+        Debug.Log("Biome textures applied successfully.");
     }
 
-    float CalculateHeightIncrement(float distance, float maxElevation, int radius)
+    void ApplyTextureToTerrain(Vector3 position, TerrainLayer layer)
     {
-        // Adjust the parameters as needed for your desired falloff curve
-        float maxDistance = 25f; // Radius
-        float plateauThreshold = 1f; // Threshold for plateau effect
-        float plateauStrength = 0.5f; // Strength of plateau effect
-        float maxIncrement = maxElevation * plateauThreshold; // Maximum increment at the center
-        float falloff = Mathf.Clamp01(1 - distance / maxDistance);
-        float plateauFactor = Mathf.Pow(Mathf.Clamp01((distance / maxDistance) * (1 / plateauThreshold)), plateauStrength);
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
 
-        // Calculate height increment with maximum limit at the center and plateau effect near the top
-        float heightIncrement = Mathf.Lerp(0, maxIncrement, falloff) * plateauFactor;
-        if (radius < 25)
+        int xResolution = terrainData.alphamapWidth;
+        int zResolution = terrainData.alphamapHeight;
+
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        int radius = 20; // Define a radius for the biome area
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        float[,,] alphamaps = terrainData.GetAlphamaps(startX, startZ, endX - startX, endZ - startZ);
+        int layerIndex = Array.IndexOf(terrainData.terrainLayers, layer);
+
+        for (int x = 0; x < alphamaps.GetLength(0); x++)
         {
-            falloff = Mathf.Clamp01(1 - distance / radius);
-            heightIncrement = falloff * maxElevation;
+            for (int z = 0; z < alphamaps.GetLength(1); z++)
+            {
+                alphamaps[x, z, layerIndex] = 1;
+            }
         }
 
-        return heightIncrement;
+        terrainData.SetAlphamaps(startX, startZ, alphamaps);
     }
 
     void GenerateRoadsFromMST()
@@ -521,18 +511,26 @@ public class MapGenerator : MonoBehaviour
 
     void SpawnTreesAndRocks()
     {
-        for (int i = 0; i < numTrees; i++)
+        foreach (var cluster in clusters)
         {
-            SpawnObject(treePrefabs);
-        }
-
-        for (int i = 0; i < numRocks; i++)
-        {
-            SpawnObject(rockPrefabs);
+            Biome biome = clusterBiomes[cluster.Key];
+            foreach (var position in cluster.Value)
+            {
+                SpawnBiomeObjects(biome, position);
+            }
         }
     }
 
-    void SpawnObject(List<GameObject> prefabs)
+    void SpawnBiomeObjects(Biome biome, Vector3 clusterCenter)
+    {
+        for (int i = 0; i < 50; i++) // Example number of objects to spawn per cluster
+        {
+            SpawnObject(biome.treePrefabs, clusterCenter);
+            SpawnObject(biome.rockPrefabs, clusterCenter);
+        }
+    }
+
+    void SpawnObject(List<GameObject> prefabs, Vector3 clusterCenter)
     {
         if (prefabs.Count == 0) return;
 
@@ -542,8 +540,8 @@ public class MapGenerator : MonoBehaviour
 
         do
         {
-            float x = UnityEngine.Random.Range(terrain.transform.position.x, terrain.transform.position.x + terrain.terrainData.size.x);
-            float z = UnityEngine.Random.Range(terrain.transform.position.z, terrain.transform.position.z + terrain.terrainData.size.z);
+            float x = UnityEngine.Random.Range(clusterCenter.x - 50, clusterCenter.x + 50);
+            float z = UnityEngine.Random.Range(clusterCenter.z - 50, clusterCenter.z + 50);
             position = new Vector3(x, terrain.SampleHeight(new Vector3(x, 0, z)) + 0.1f, z);
 
             validPosition = IsValidSpawnPosition(position);
@@ -617,16 +615,63 @@ public class MapGenerator : MonoBehaviour
         return fields.ToArray();
     }
 
+    void SetupMiniMap()
+    {
+        miniMapController.minX = minX;
+        miniMapController.maxX = maxX;
+        miniMapController.minZ = minZ;
+        miniMapController.maxZ = maxZ;
+        miniMapController.SetupMiniMap();
+    }
+
+    void InstantiateHouses()
+    {
+        foreach (var houseEntry in housePositions)
+        {
+            Vector3 position = houseEntry.Value;
+
+            try
+            {
+                // Get the corrected height for the house position
+                float terrainHeight = terrain.SampleHeight(position);
+
+                // Instantiate the house prefab at the adjusted height
+                GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+                float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+                GameObject house = Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
+
+                // Get house dimensions using MeshFilter bounds for more accuracy
+                MeshFilter meshFilter = house.GetComponent<MeshFilter>();
+                if (meshFilter != null)
+                {
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    // Instantiate the cube underneath the house
+                    Vector3 cubePosition = new Vector3(position.x, terrainHeight - (houseSize.y / 1.5f), position.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
+                    Debug.Log($"Spawning house at y={terrainHeight} and cube at y={terrainHeight - (houseSize.y / 2)} with scale {houseSize}");
+                }
+                else
+                {
+                    Debug.LogError("House prefab does not have a MeshFilter component.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error positioning house at {position}: {ex.Message}");
+            }
+        }
+    }
+
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.P))
+        if (canclearmap && Input.GetKeyDown(KeyCode.P))
         {
             RestoreOriginalTerrain();
-        }
-
-        if (Input.GetKeyDown(KeyCode.M))
-        {
-            ToggleMiniMap();
         }
     }
 
@@ -647,82 +692,5 @@ public class MapGenerator : MonoBehaviour
         newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
         terrain.terrainData.terrainLayers = newLayersList.ToArray();
         terrain.transform.position = new Vector3(0, 0, 0);
-        Debug.Log("Terrain restored to original state.");
-    }
-
-    public int CalculateAdjustedDistance(Vector3 position)
-    {
-        float nearestDistance = float.MaxValue;
-
-        foreach (var houseEntry in housePositions)
-        {
-            Vector3 housePosition = houseEntry.Value;
-            // Calculate horizontal distance using only x and z coordinates
-            float distance = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(housePosition.x, housePosition.z));
-
-            // Skip if the distance is 0
-            if (distance == 0)
-            {
-                continue;
-            }
-
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-            }
-        }
-
-        if (nearestDistance == float.MaxValue)
-        {
-            return 0; // No valid distance found
-        }
-        else if (nearestDistance < 75)
-        {
-            return Mathf.RoundToInt(nearestDistance / 5);
-        }
-        else
-        {
-            return 25;
-        }
-    }
-
-    void SetupMiniMap()
-    {
-        // Create a new GameObject for the mini-map camera
-        GameObject miniMapCameraObject = new GameObject("MiniMapCamera");
-        miniMapCamera = miniMapCameraObject.AddComponent<Camera>();
-
-        // Configure the mini-map camera
-        miniMapCamera.orthographic = true;
-        miniMapCamera.orthographicSize = Mathf.Max(maxX - minX, maxZ - minZ) / 2f;
-        miniMapCamera.transform.position = new Vector3((minX + maxX) / 2, 100, (minZ + maxZ) / 2);
-        miniMapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);
-        miniMapCamera.cullingMask = LayerMask.GetMask("Default");
-
-        // Set the mini-map camera to render to a render texture
-        miniMapCamera.targetTexture = new RenderTexture(512, 512, 16, RenderTextureFormat.ARGB32);
-        miniMapCamera.gameObject.SetActive(false);
-
-        // Create a UI element to display the mini-map
-        miniMapUI = new GameObject("MiniMapUI");
-        Canvas canvas = miniMapUI.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-        GameObject rawImageObject = new GameObject("MiniMapImage");
-        rawImageObject.transform.parent = miniMapUI.transform;
-        UnityEngine.UI.RawImage rawImage = rawImageObject.AddComponent<UnityEngine.UI.RawImage>();
-        rawImage.texture = miniMapCamera.targetTexture;
-        RectTransform rectTransform = rawImage.GetComponent<RectTransform>();
-        rectTransform.anchorMin = new Vector2(0.75f, 0.75f); // Adjust the position on the screen
-        rectTransform.anchorMax = new Vector2(1f, 1f);
-        rectTransform.sizeDelta = new Vector2(256, 256); // Adjust the size of the mini-map
-        miniMapUI.SetActive(false); // Start with the mini-map hidden
-    }
-
-    void ToggleMiniMap()
-    {
-        isMiniMapVisible = !isMiniMapVisible;
-        miniMapCamera.gameObject.SetActive(isMiniMapVisible);
-        miniMapUI.SetActive(isMiniMapVisible);
     }
 }
