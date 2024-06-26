@@ -4,6 +4,7 @@ using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
 using TMPro;
+using System.Linq; // Make sure to include this for LINQ
 
 [System.Serializable]
 public class Biome
@@ -37,7 +38,8 @@ public class MapGenerator : MonoBehaviour
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
     private Dictionary<int, List<Vector3>> clusters = new Dictionary<int, List<Vector3>>(); // Store clusters
     private Dictionary<int, Biome> clusterBiomes = new Dictionary<int, Biome>(); // Store assigned biomes for each cluster
-    private float[,] originalHeights; // Store original terrain heights
+    private Dictionary<int, Terrain> clusterTerrains = new Dictionary<int, Terrain>(); // Store terrains for each cluster
+    private Dictionary<int, float[,]> originalHeights = new Dictionary<int, float[,]>(); // Store original terrain heights for each cluster
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
     public bool canclearmap = true;
@@ -72,7 +74,6 @@ public class MapGenerator : MonoBehaviour
 
         CalculateTerrainSize();
         AdjustTerrainSize();
-        originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
         GenerateMapFromCSV();
         AssignBiomesToClusters();
         ApplyBiomeTextures();
@@ -252,11 +253,13 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
+        GenerateClusterTerrains(); // Generate terrains for each cluster
+
         foreach (var cluster in clusters)
         {
             foreach (var position in cluster.Value)
             {
-                ElevateTerrainAround(position);
+                ElevateTerrainAround(clusterTerrains[cluster.Key], position);
             }
         }
 
@@ -264,7 +267,36 @@ public class MapGenerator : MonoBehaviour
         GenerateRoadsFromMST();
     }
 
-    void ElevateTerrainAround(Vector3 position)
+    void GenerateClusterTerrains()
+    {
+        foreach (var cluster in clusters)
+        {
+            Vector3 clusterMin = new Vector3(float.MaxValue, 0, float.MaxValue);
+            Vector3 clusterMax = new Vector3(float.MinValue, 0, float.MinValue);
+
+            foreach (var position in cluster.Value)
+            {
+                if (position.x < clusterMin.x) clusterMin.x = position.x;
+                if (position.x > clusterMax.x) clusterMax.x = position.x;
+                if (position.z < clusterMin.z) clusterMin.z = position.z;
+                if (position.z > clusterMax.z) clusterMax.z = position.z;
+            }
+
+            TerrainData terrainData = new TerrainData();
+            terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
+            terrainData.size = new Vector3(clusterMax.x - clusterMin.x + 100, terrain.terrainData.size.y, clusterMax.z - clusterMin.z + 100);
+            GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
+            Terrain newTerrain = terrainObject.GetComponent<Terrain>();
+            newTerrain.transform.position = new Vector3(clusterMin.x - 50, 0, clusterMin.z - 50);
+            clusterTerrains[cluster.Key] = newTerrain;
+
+            float[,] heights = new float[terrainData.heightmapResolution, terrainData.heightmapResolution];
+            originalHeights[cluster.Key] = heights;
+            terrainData.SetHeights(0, 0, heights);
+        }
+    }
+
+    void ElevateTerrainAround(Terrain terrain, Vector3 position)
     {
         Debug.Log($"Elevating terrain around position: {position}");
 
@@ -278,8 +310,8 @@ public class MapGenerator : MonoBehaviour
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
-        // Increase the radius for wider mounds
-        int radius = 20;
+        // Decrease the radius for smaller mounds
+        int radius = 65;
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -346,12 +378,13 @@ public class MapGenerator : MonoBehaviour
 
     void ApplyBiomeTextures()
     {
-        TerrainData terrainData = terrain.terrainData;
-        List<TerrainLayer> terrainLayers = new List<TerrainLayer>(terrainData.terrainLayers);
-
         foreach (var cluster in clusters)
         {
             Biome biome = clusterBiomes[cluster.Key];
+            Terrain terrain = clusterTerrains[cluster.Key];
+            TerrainData terrainData = terrain.terrainData;
+            List<TerrainLayer> terrainLayers = new List<TerrainLayer>(terrainData.terrainLayers);
+
             TerrainLayer newLayer = new TerrainLayer
             {
                 diffuseTexture = biome.terrainTexture,
@@ -359,18 +392,18 @@ public class MapGenerator : MonoBehaviour
                 tileOffset = biome.textureOffset
             };
             terrainLayers.Add(newLayer);
+            terrainData.terrainLayers = terrainLayers.ToArray();
 
             foreach (var position in cluster.Value)
             {
-                ApplyTextureToTerrain(position, newLayer);
+                ApplyTextureToTerrain(terrain, position, newLayer);
             }
-        }
 
-        terrainData.terrainLayers = terrainLayers.ToArray();
-        Debug.Log("Biome textures applied successfully.");
+            Debug.Log("Biome textures applied successfully.");
+        }
     }
 
-    void ApplyTextureToTerrain(Vector3 position, TerrainLayer layer)
+    void ApplyTextureToTerrain(Terrain terrain, Vector3 position, TerrainLayer layer)
     {
         TerrainData terrainData = terrain.terrainData;
         Vector3 terrainPos = terrain.transform.position;
@@ -459,6 +492,18 @@ public class MapGenerator : MonoBehaviour
     {
         Debug.Log($"Generating road segment between {position1} and {position2}");
 
+        // Find the cluster ID for the start and end positions
+        int clusterId1 = clusters.First(c => c.Value.Contains(position1)).Key;
+        int clusterId2 = clusters.First(c => c.Value.Contains(position2)).Key;
+
+        if (clusterId1 != clusterId2)
+        {
+            Debug.LogWarning($"Cannot generate road segment between different clusters: {clusterId1} and {clusterId2}");
+            return;
+        }
+
+        Terrain terrain = clusterTerrains[clusterId1];
+
         // Calculate the number of segments based on the distance
         int segments = Mathf.CeilToInt(Vector3.Distance(position1, position2) / 1f); // Increase the number of segments
         Vector3 direction = (position2 - position1) / segments;
@@ -472,11 +517,11 @@ public class MapGenerator : MonoBehaviour
             start.y = terrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
             end.y = terrain.SampleHeight(end) + 0.1f;
 
-            CreateRoadBetween(start, end);
+            CreateRoadBetween(start, end, terrain);
         }
     }
 
-    void CreateRoadBetween(Vector3 position1, Vector3 position2)
+    void CreateRoadBetween(Vector3 position1, Vector3 position2, Terrain terrain)
     {
         Debug.Log($"Creating road between {position1} and {position2}");
 
@@ -629,6 +674,8 @@ public class MapGenerator : MonoBehaviour
         foreach (var houseEntry in housePositions)
         {
             Vector3 position = houseEntry.Value;
+            int clusterId = clusters.First(c => c.Value.Contains(position)).Key;
+            Terrain terrain = clusterTerrains[clusterId];
 
             try
             {
@@ -677,20 +724,11 @@ public class MapGenerator : MonoBehaviour
 
     void RestoreOriginalTerrain()
     {
-        if (terrain == null || originalHeights == null)
+        foreach (var terrain in clusterTerrains.Values)
         {
-            Debug.LogError("Terrain or original heights not assigned.");
-            return;
+            int clusterId = clusterTerrains.First(ct => ct.Value == terrain).Key;
+            float[,] heights = originalHeights[clusterId];
+            terrain.terrainData.SetHeights(0, 0, heights);
         }
-
-        // Restore the terrain to its original state
-        terrain.terrainData.SetHeights(0, 0, originalHeights);
-
-        // Remove the added texture layer
-        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
-        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
-        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
-        terrain.terrainData.terrainLayers = newLayersList.ToArray();
-        terrain.transform.position = new Vector3(0, 0, 0);
     }
 }
