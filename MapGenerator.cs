@@ -6,16 +6,6 @@ using System.Collections.Generic;
 using TMPro;
 using System.Linq; // Make sure to include this for LINQ
 
-[System.Serializable]
-public class Biome
-{
-    public string name;
-    public Texture2D terrainTexture;
-    public Vector2 textureOffset;
-    public Vector2 textureTiling;
-    public List<GameObject> treePrefabs;
-    public List<GameObject> rockPrefabs;
-}
 
 public class MapGenerator : MonoBehaviour
 {
@@ -43,6 +33,10 @@ public class MapGenerator : MonoBehaviour
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
     public bool canclearmap = true;
+
+    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
+    public Dictionary<string, bool> MasteredTopics => masteredTopics;
+    public Dictionary<int, List<string>> clusterLabels = new Dictionary<int, List<string>>();
 
     void Start()
     {
@@ -215,6 +209,7 @@ public class MapGenerator : MonoBehaviour
         // Clear existing house positions
         housePositions.Clear();
         clusters.Clear();
+        clusterLabels.Clear();
 
         while (reader.Peek() != -1)
         {
@@ -244,8 +239,16 @@ public class MapGenerator : MonoBehaviour
                 if (!clusters.ContainsKey(clusterId))
                 {
                     clusters[clusterId] = new List<Vector3>();
+                    
                 }
                 clusters[clusterId].Add(position);
+
+                if (!clusterLabels.ContainsKey(clusterId))
+                {
+                    clusterLabels[clusterId] = new List<string>();
+                }
+
+                clusterLabels[clusterId].Add(label);
             }
             else
             {
@@ -731,4 +734,15 @@ public class MapGenerator : MonoBehaviour
             terrain.terrainData.SetHeights(0, 0, heights);
         }
     }
+}
+
+[System.Serializable]
+public class Biome
+{
+    public string name;
+    public Texture2D terrainTexture;
+    public Vector2 textureOffset;
+    public Vector2 textureTiling;
+    public List<GameObject> treePrefabs;
+    public List<GameObject> rockPrefabs;
 }
