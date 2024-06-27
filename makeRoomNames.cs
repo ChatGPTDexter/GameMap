@@ -15,9 +15,14 @@ public class HouseNames : MonoBehaviour
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
     private Camera mainCamera; // Reference to the main camera
+    private GameCompletion gameCompletion;
+
+    private Dictionary<string, string> nameMappings = new Dictionary<string, string>();
+
 
     void Start()
     {
+        gameCompletion = FindObjectOfType<GameCompletion>();
         StartCoroutine(ProcessCSVData());
 
         // Get reference to the main camera
@@ -75,7 +80,7 @@ public class HouseNames : MonoBehaviour
             // Generate puzzle room name based on transcript
             yield return StartCoroutine(MakeName(transcript, i));
 
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(1f);
         }
     }
 
@@ -100,6 +105,8 @@ public class HouseNames : MonoBehaviour
         // Once name is generated, create the TextMeshPro object
         if (!string.IsNullOrEmpty(generatedName))
         {
+            string originalName = transcripts.parsedData[rowIndex][0].Trim(); // Assuming transcript is in the fourth column
+            nameMappings[originalName] = generatedName;
             CreateNameObject(generatedName, rowIndex);
         }
         else
@@ -270,6 +277,39 @@ public class HouseNames : MonoBehaviour
         }
 
         return fields.ToArray();
+    }
+
+    public void ChangeCompletedColors(Dictionary<int, Dictionary<string, bool>> clusterMasteryStatus)
+    {
+        foreach (var cluster in clusterMasteryStatus)
+        {
+            foreach (var labelStatus in cluster.Value)
+            {
+                string label = labelStatus.Key.Trim(); // Trim whitespace from label
+                bool isMastered = labelStatus.Value;
+
+                // Check if the label exists in nameMappings
+                if (nameMappings.ContainsKey(label))
+                {
+                    string generatedName = nameMappings[label];
+
+                    // Find all TextMeshPro objects that match the generated name
+                    foreach (var nameObject in nameObjects)
+                    {
+                        TextMeshPro textMesh = nameObject.GetComponent<TextMeshPro>();
+                        if (textMesh != null && textMesh.text.Trim() == generatedName)
+                        {
+                            // Change color based on mastery status
+                            textMesh.color = isMastered ? Color.green : Color.white;
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"Label '{label}' not found in nameMappings.");
+                }
+            }
+        }
     }
 }
 
