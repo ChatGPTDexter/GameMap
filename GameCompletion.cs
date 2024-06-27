@@ -8,9 +8,12 @@ public class GameCompletion : MonoBehaviour
     private MapGenerator mapGenerator;
     private Dictionary<int, Dictionary<string, bool>> clusterMasteryStatus;
 
+    public HouseNames houseNames;
+
     void Start()
     {
         mapGenerator = FindObjectOfType<MapGenerator>();
+        houseNames = FindObjectOfType<HouseNames>();
     }
 
     public void OnAskQuestion()
@@ -51,5 +54,7 @@ public class GameCompletion : MonoBehaviour
         }
 
         Debug.Log("Triggered");
+
+        houseNames.ChangeCompletedColors(clusterMasteryStatus);
     }
 }
