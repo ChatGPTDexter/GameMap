@@ -11,7 +11,7 @@ public class CharacterAI : MonoBehaviour
     public string transcript;
     public TMP_InputField userInputField;
     public TMP_Text responseText;
-    public Button submitButton;
+
 
     private const string OpenAIAPIKey = "api-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
@@ -19,6 +19,8 @@ public class CharacterAI : MonoBehaviour
     private MapGenerator mapGenerator;
     private Jump jump;
     private MiniMapController miniMapController;
+    private CharacterSpawner characterSpawner;
+    private GameCompletion gameCompletion;
 
     // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
@@ -31,6 +33,8 @@ public class CharacterAI : MonoBehaviour
         mapGenerator = FindObjectOfType<MapGenerator>();
         jump = FindObjectOfType<Jump>();  // Assuming Jump script controls jumping behavior
         miniMapController = FindObjectOfType<MiniMapController>();  // Assuming MiniMapController script handles mini-map functionality
+        characterSpawner = FindObjectOfType<CharacterSpawner>();  // Ensure characterSpawner is initialized
+        gameCompletion = FindObjectOfType<GameCompletion>();
 
         // Listen for the Return key to submit the question
         userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
@@ -48,7 +52,7 @@ public class CharacterAI : MonoBehaviour
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic by creating an interactive experience. You should guide the user by explaining concepts clearly, answering questions, and providing relevant information from the transcript. Additionally, to make the learning experience more engaging, present the user with a challenging riddle related to the topic. The answer to the riddle must be found within the information in the transcript, encouraging the user to think critically and reflect on what they've learned."
+            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, present the user with a very challenging riddle related to the transcript. Once the the responder answers the riddle sufficiently say 'Correct! You are on your way to mastering Chemistry!'"
         });
     }
 
@@ -166,6 +170,21 @@ public class CharacterAI : MonoBehaviour
 
                     responseText.text = messageContent;
                     Debug.Log($"Setting response text to: {messageContent}");
+
+                    // Debugging: Log the message content
+                    Debug.Log($"Message Content: {messageContent}");
+                    Debug.Log($"Trimmed and Lowercase Message Content: {messageContent.ToLower().Trim()}");
+
+                    if (messageContent.ToLower().Trim().Contains("correct! you are on your way to mastering chemistry!".ToLower().Trim()))
+                    {
+                        Debug.Log($"Masted {topicLabel}");
+                        if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel)) // Access through characterSpawner instance
+                        {
+                            Debug.Log($"Mastered {topicLabel}");
+                            mapGenerator.MasteredTopics.Add(topicLabel, true); // Track this topic as mastered
+                            StartCoroutine(DelayedOnAskQuestion());
+                        }
+                    }
                 }
                 else
                 {
@@ -180,8 +199,17 @@ public class CharacterAI : MonoBehaviour
             firstPersonMovement.EnableMovement();
         }
     }
-}
 
+
+    private IEnumerator DelayedOnAskQuestion()
+    {
+        Debug.Log("Waiting before calling OnAskQuestion...");
+        yield return new WaitForSeconds(1f); // Wait for 1 second
+        Debug.Log("Delay finished, calling OnAskQuestion");
+        gameCompletion.OnAskQuestion();
+    }
+
+}
 // Helper classes to parse OpenAI response
 [System.Serializable]
 public class OpenAIRequest
