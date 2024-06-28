@@ -299,6 +299,18 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
+    float CalculateSmootherParabolicHeightIncrement(float distance, float maxElevation, int radius)
+    {
+        float maxDistance = radius;
+
+        // Smoother parabolic falloff effect
+        if (distance > maxDistance) return 0;
+
+        float normalizedDistance = distance / maxDistance;
+        float heightIncrement = maxElevation * (1 - Mathf.Pow(normalizedDistance, 3)); // Smoother parabolic curve
+
+        return heightIncrement;
+    }
     void ElevateTerrainAround(Terrain terrain, Vector3 position)
     {
         Debug.Log($"Elevating terrain around position: {position}");
@@ -313,8 +325,7 @@ public class MapGenerator : MonoBehaviour
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
-        // Decrease the radius for smaller mounds
-        int radius = 65;
+        int radius = 100; // Increase the radius for larger mounds
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -328,19 +339,18 @@ public class MapGenerator : MonoBehaviour
         // Calculate maximum elevation based on z-coordinate from CSV
         float maxElevation = position.y / terrainData.size.y;
 
-        // Calculate falloff based on distance from the center
+        // Calculate height increment using smoother parabolic function and blending with existing heights
         for (int x = 0; x < heights.GetLength(0); x++)
         {
             for (int z = 0; z < heights.GetLength(1); z++)
             {
-                // Calculate distance from center of the area
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
 
-                // Calculate height increment based on maximum elevation and falloff
-                float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
+                // Smoother parabolic height increment
+                float heightIncrement = CalculateSmootherParabolicHeightIncrement(distance, maxElevation, radius);
 
-                // Apply the height increment to the current height
-                heights[x, z] += heightIncrement;
+                // Blend the new height increment with the existing height
+                heights[x, z] = Mathf.Max(heights[x, z], heightIncrement);
             }
         }
 
@@ -348,11 +358,10 @@ public class MapGenerator : MonoBehaviour
         terrainData.SetHeights(startX, startZ, heights);
         Debug.Log("Terrain elevation applied");
     }
-
     float CalculateHeightIncrement(float distance, float maxElevation, int radius)
     {
         float maxDistance = radius;
-        float falloffExponent = 0.2f; // Lower value for more gradual falloff
+        float falloffExponent = 0.5f; // Adjust for smoother falloff
 
         // Calculate falloff effect
         float falloff = Mathf.Pow(1 - Mathf.Clamp01(distance / maxDistance), falloffExponent);
@@ -361,6 +370,12 @@ public class MapGenerator : MonoBehaviour
         float heightIncrement = maxElevation * falloff;
 
         return heightIncrement;
+    }
+    float BlendHeight(float originalHeight, float increment)
+    {
+        // Simple blending formula (adjust blend factor as needed)
+        float blendFactor = 0.5f;
+        return originalHeight * (1 - blendFactor) + increment * blendFactor;
     }
 
     void AssignBiomesToClusters()
