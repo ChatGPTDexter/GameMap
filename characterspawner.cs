@@ -8,22 +8,23 @@ using UnityEngine.UI;
 public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab;
-    [SerializeField] private GameObject spawnCharacterPrefab; // Asign the spawnCharacterAI here
+    [SerializeField] private GameObject spawnCharacterPrefab; // Assign the spawnCharacterAI here
     [SerializeField] private GameObject uiCanvasPrefab;
     [SerializeField] public TextAsset coordinatesCsvFile;
     [SerializeField] public TextAsset transcriptsCsvFile;
-    [SerializeField] private Terrain terrain; // Reference to the Terrain component
     [SerializeField] private MapGenerator mapGenerator; // Reference to MapGenerator script
 
     private class TopicInfo
     {
-        public Vector3 Position { get; set; }
         public string Label { get; set; }
         public string Transcript { get; set; }
     }
 
     private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
     private List<SpawnCharacterAI> startSpawnedCharacters = new List<SpawnCharacterAI>();
+    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
+
+    public Dictionary<string, bool> MasteredTopics => masteredTopics;
 
     void Start()
     {
@@ -60,13 +61,12 @@ public class CharacterSpawner : MonoBehaviour
 
         foreach (var coordinate in coordinates)
         {
-            string trimmedLabel = coordinate.Label.Trim(); // Trim the label to ensure consistency
+            string trimmedLabel = coordinate.Label.Trim();
 
             if (transcripts.TryGetValue(trimmedLabel, out string transcript))
             {
                 topics.Add(new TopicInfo
                 {
-                    Position = new Vector3(coordinate.Position.x, coordinate.Position.y, coordinate.Position.z),
                     Label = trimmedLabel,
                     Transcript = transcript
                 });
@@ -80,9 +80,9 @@ public class CharacterSpawner : MonoBehaviour
         return topics;
     }
 
-    private List<(string Label, Vector3 Position)> ReadCoordinatesFromCSV(TextAsset csvFile)
+    private List<(string Label, float NormalizedTranscriptLength)> ReadCoordinatesFromCSV(TextAsset csvFile)
     {
-        List<(string Label, Vector3 Position)> coordinates = new List<(string Label, Vector3 Position)>();
+        List<(string Label, float NormalizedTranscriptLength)> coordinates = new List<(string Label, float NormalizedTranscriptLength)>();
 
         try
         {
@@ -99,20 +99,17 @@ public class CharacterSpawner : MonoBehaviour
             {
                 var values = SplitCsvLine(line);
 
-                if (values.Length >= 4)
+                if (values.Length >= 6)
                 {
-                    if (float.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
-                        float.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
-                        float.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+                    if (float.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float normalizedTranscriptLength))
                     {
-                        Vector3 position = new Vector3(x, y, z);
                         string label = values[4].Trim('"');
-                        coordinates.Add((label, position));
-                        Debug.Log($"Parsed coordinate: {label} at position: {position}");
+                        coordinates.Add((label, normalizedTranscriptLength));
+                        Debug.Log($"Parsed coordinate: {label} with normalized transcript length: {normalizedTranscriptLength}");
                     }
                     else
                     {
-                        Debug.LogWarning($"Failed to parse coordinates for line: {line}");
+                        Debug.LogWarning($"Failed to parse normalized transcript length for line: {line}");
                     }
                 }
                 else
@@ -144,7 +141,7 @@ public class CharacterSpawner : MonoBehaviour
 
                 if (values.Length >= 2)
                 {
-                    string label = values[0].Trim().Trim('"'); // Trim whitespace and quotes
+                    string label = values[0].Trim().Trim('"');
                     string transcript = values[3].Trim().Trim('"');
                     transcripts[label] = transcript;
                     Debug.Log($"Parsed transcript for label: {label} - {transcript}");
@@ -167,97 +164,72 @@ public class CharacterSpawner : MonoBehaviour
     {
         foreach (var topic in topics)
         {
-            Debug.Log($"Spawning character for topic: {topic.Label} at position: {topic.Position}");
-
-            Vector3 adjustedPosition = AdjustPositionToTerrain(topic.Position);
-
-            Debug.Log($"This is adjusted position {adjustedPosition}!");
-            GameObject character = Instantiate(characterPrefab, adjustedPosition, Quaternion.identity);
-
-            var characterAI = character.GetComponent<CharacterAI>();
-            if (characterAI != null)
+            if (!mapGenerator.housePositionsByLabel.TryGetValue(topic.Label, out List<Vector3> housePositions))
             {
-                Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
-                characterAI.Initialize(topic.Label, topic.Transcript);
-                spawnedCharacters.Add(characterAI);
-            }
-            else
-            {
-                Debug.LogError($"Character {topic.Label} does not have a CharacterAI component attached.");
+                Debug.LogWarning($"No house positions found for label: {topic.Label}");
+                continue;
             }
 
-            character.name = topic.Label;
+            for (int i = 0; i < housePositions.Count; i++)
+            {
+                Vector3 housePosition = housePositions[i];
+                Vector3 adjustedPosition = housePosition + new Vector3(0, 0, 5f); // Adjusted position in front of the house
 
+                Debug.Log($"Spawning character for topic: {topic.Label} at adjusted position: {adjustedPosition}");
 
+                GameObject character = Instantiate(characterPrefab, adjustedPosition, Quaternion.identity);
 
-            // Position the UI Canvas slightly in front of the character
-            Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
-            GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+                var characterAI = character.GetComponent<CharacterAI>();
+                if (characterAI != null)
+                {
+                    Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
+                    string characterTranscript = GetTranscriptSegment(topic.Transcript, housePositions.Count, i);
+                    characterAI.Initialize($"{topic.Label} - Part {i + 1}", characterTranscript);
+                    spawnedCharacters.Add(characterAI);
+                }
+                else
+                {
+                    Debug.LogError($"Character {topic.Label} does not have a CharacterAI component attached.");
+                }
 
+                character.name = $"{topic.Label} - Part {i + 1}";
 
+                // Position the UI Canvas slightly in front of the character
+                Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+                GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
 
-            Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
-            canvasComponent.renderMode = RenderMode.WorldSpace;
+                Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+                canvasComponent.renderMode = RenderMode.WorldSpace;
 
-            // Set the canvas as a child of the character to follow its movements
-            uiCanvas.transform.SetParent(character.transform);
+                // Set the canvas as a child of the character to follow its movements
+                uiCanvas.transform.SetParent(character.transform);
 
-            // Apply a 180-degree rotation to the canvas around the Y-axis
-            uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+                // Apply a 180-degree rotation to the canvas around the Y-axis
+                uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-            uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+                uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
 
-            // Set the canvas sorting order (Remove the duplicate declaration)
-            canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
+                // Set the canvas sorting order (Remove the duplicate declaration)
+                canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
 
-            AssignUIElements(characterAI, uiCanvas);
+                AssignUIElements(characterAI, uiCanvas);
+            }
         }
     }
 
-    private Vector3 AdjustPositionToTerrain(Vector3 position)
+    private string GetTranscriptSegment(string transcript, int totalSegments, int segmentIndex)
     {
-        if (terrain == null)
+        if (totalSegments <= 1)
         {
-            Debug.LogError("Terrain component is not assigned.");
-            return position;
+            return transcript;
         }
 
-        Vector3 houseDimensions = GetHouseDimensions();
+        var words = transcript.Split(' ');
+        int segmentSize = words.Length / totalSegments;
+        int start = segmentIndex * segmentSize;
+        int end = (segmentIndex == totalSegments - 1) ? words.Length : start + segmentSize;
 
-        float zOffset = houseDimensions.z + 1f;
-
-        // Get the terrain height at the original position
-        float terrainHeight = terrain.SampleHeight(new Vector3(position.x, 0, position.z));
-
-        // Adjust the position by adding the zOffset to the z-coordinate
-        return new Vector3(
-            position.x,
-            terrainHeight,
-            position.z + zOffset
-        );
-    }
-
-    private Vector3 GetHouseDimensions()
-    {
-        if (mapGenerator.housePrefabs.Count == 0)
-        {
-            Debug.LogError("No house prefabs assigned in MapGenerator.");
-            return Vector3.zero;
-        }
-
-        GameObject housePrefab = mapGenerator.housePrefabs[0];
-        MeshFilter meshFilter = housePrefab.GetComponentInChildren<MeshFilter>();
-        if (meshFilter == null)
-        {
-            Debug.LogError($"House prefab '{housePrefab.name}' does not have a MeshFilter component.");
-            return Vector3.zero;
-        }
-
-        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-        Vector3 houseScale = housePrefab.transform.localScale;
-        houseSize = Vector3.Scale(houseSize, houseScale);
-
-        return houseSize;
+        return string.Join(" ", words.Skip(start).Take(end - start));
     }
 
     private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas)
@@ -316,7 +288,6 @@ public class CharacterSpawner : MonoBehaviour
         }
     }
 
-
     private void AssignUIElementsStart(SpawnCharacterAI sCharacterAI, GameObject uiCanvas)
     {
         if (sCharacterAI == null || uiCanvas == null)
@@ -372,6 +343,30 @@ public class CharacterSpawner : MonoBehaviour
             Debug.LogWarning("No TMP_Text found in the UI Canvas.");
         }
     }
+
+    private Vector3 GetHouseDimensions()
+    {
+        if (mapGenerator.housePrefabs.Count == 0)
+        {
+            Debug.LogError("No house prefabs assigned in MapGenerator.");
+            return Vector3.zero;
+        }
+
+        GameObject housePrefab = mapGenerator.housePrefabs[0];
+        MeshFilter meshFilter = housePrefab.GetComponentInChildren<MeshFilter>();
+        if (meshFilter == null)
+        {
+            Debug.LogError($"House prefab '{housePrefab.name}' does not have a MeshFilter component.");
+            return Vector3.zero;
+        }
+
+        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+        Vector3 houseScale = housePrefab.transform.localScale;
+        houseSize = Vector3.Scale(houseSize, houseScale);
+
+        return houseSize;
+    }
+
     private string[] SplitCsvLine(string line)
     {
         List<string> values = new List<string>();
@@ -445,7 +440,8 @@ public class CharacterSpawner : MonoBehaviour
             if (index == 0)
             {
                 sCharacterAI.InitializeFirstOne();
-            } else
+            }
+            else
             {
                 sCharacterAI.InitializeSecondOne();
             }
@@ -458,8 +454,6 @@ public class CharacterSpawner : MonoBehaviour
 
         Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
         GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
-
-
 
         Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
         canvasComponent.renderMode = RenderMode.WorldSpace;
