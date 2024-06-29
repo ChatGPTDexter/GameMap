@@ -43,6 +43,8 @@ public class MapGenerator : MonoBehaviour
 
     void Start()
     {
+        Debug.Log("MapGenerator Start");
+        characterSpawner = FindObjectOfType<CharacterSpawner>();
         if (houseCsvFile == null || mstCsvFile == null)
         {
             Debug.LogError("CSV files not assigned. Please assign CSV files in the Inspector.");
@@ -168,84 +170,82 @@ public class MapGenerator : MonoBehaviour
     }
 
      void createSpawnIsland()
- {
-     TerrainData terrainData = new TerrainData();
-     terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
-     terrainData.size = new Vector3(600, terrain.terrainData.size.y, 600);
-     GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
-     Terrain newTerrain = terrainObject.GetComponent<Terrain>();
-     newTerrain.transform.position = new Vector3((maxX- minX) / 2 + minX - 300, 0, (maxZ - minZ) / 2 + minZ - 300);
-
-     Vector3 islandCenter = new Vector3((maxX - minX) / 2 + minX, 0, (maxZ - minZ) / 2 + minZ);
-
-     float islandRadius = 100; // Define the half-length of the side of the square island
-
-     // Create a random number generator
-     System.Random random = new System.Random();
-
-     List<Vector3> houseCoordinates = new List<Vector3>();
-
-     // Generate three random positions within the square island bounds
-     for (int i = 0; i < 2; i++)
      {
-         // Generate random x and z positions within the square
-         float randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-         float randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-         float randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 15 and 60
-
-         // Calculate the random position within the square island
-         Vector3 randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
-
-         // Elevate terrain around the random position
-         ElevateTerrainAround(newTerrain, randomPosition);
-
-         // Instantiate the house prefab at the adjusted height
-         GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-         float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
-         GameObject house = Instantiate(housePrefab, new Vector3(randomPosition.x, randomPosition.y + (houseHeight / 2), randomPosition.z), Quaternion.identity);
-
-         houseCoordinates.Add(randomPosition);
-         characterSpawner.spawnSpawnCharacter(randomPosition, i);
-
-         if (i == 0)
+         TerrainData terrainData = new TerrainData();
+         terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
+         terrainData.size = new Vector3(600, terrain.terrainData.size.y, 600);
+         GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
+         Terrain newTerrain = terrainObject.GetComponent<Terrain>();
+         newTerrain.transform.position = new Vector3((maxX- minX) / 2 + minX - 300, 0, (maxZ - minZ) / 2 + minZ - 300);
+    
+         Vector3 islandCenter = new Vector3((maxX - minX) / 2 + minX, 0, (maxZ - minZ) / 2 + minZ);
+    
+         float islandRadius = 100; // Define the half-length of the side of the square island
+    
+         // Create a random number generator
+         System.Random random = new System.Random();
+    
+         List<Vector3> houseCoordinates = new List<Vector3>();
+    
+         // Generate three random positions within the square island bounds
+         for (int i = 0; i < 2; i++)
          {
-             player.transform.position = new Vector3(randomPosition.x, randomPosition.y + 4, randomPosition.z + 5);
+             // Generate random x and z positions within the square
+             float randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+             float randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+             float randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 15 and 60
+    
+             // Calculate the random position within the square island
+             Vector3 randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
+    
+             // Elevate terrain around the random position
+             ElevateTerrainAround(newTerrain, randomPosition);
+    
+             // Instantiate the house prefab at the adjusted height
+             GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+             float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+             GameObject house = Instantiate(housePrefab, new Vector3(randomPosition.x, randomPosition.y + (houseHeight / 2), randomPosition.z), Quaternion.identity);
+    
+             houseCoordinates.Add(randomPosition);
+             characterSpawner.spawnSpawnCharacter(randomPosition, i);
+    
+             if (i == 0)
+             {
+                 player.transform.position = new Vector3(randomPosition.x, randomPosition.y + 4, randomPosition.z + 5);
+             }
          }
+    
+         Biome islandBiome = biomes[0];
+    
+         // Create and apply the biome's terrain layer
+         TerrainLayer newLayer = new TerrainLayer
+         {
+             diffuseTexture = islandBiome.terrainTexture,
+             tileSize = islandBiome.textureTiling,
+             tileOffset = islandBiome.textureOffset
+         };
+         terrainData.terrainLayers = new TerrainLayer[] { newLayer };
+    
+         // Apply the texture to the entire spawn island terrain
+         ApplyTextureToTerrain(newTerrain, islandCenter, newLayer);
+    
+         int segments = Mathf.CeilToInt(Vector3.Distance(houseCoordinates[0], houseCoordinates[1]) / 1f); // Increase the number of segments
+         Vector3 direction = -(houseCoordinates[0] - houseCoordinates[1]) / segments;
+    
+         for (int i = 0; i < segments; i++)
+         {
+             Vector3 start = houseCoordinates[0] + direction * i;
+             Vector3 end = houseCoordinates[0] + direction * (i + 1);
+    
+             // Adjust the y-coordinate to match the terrain height
+             start.y = newTerrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
+             end.y = newTerrain.SampleHeight(end) + 0.1f;
+    
+             CreateRoadBetween(start, end, newTerrain);
+         }
+    
+         SpawnBiomeObjects(islandBiome, islandCenter);  
      }
-
-     Biome islandBiome = biomes[0];
-
-     // Create and apply the biome's terrain layer
-     TerrainLayer newLayer = new TerrainLayer
-     {
-         diffuseTexture = islandBiome.terrainTexture,
-         tileSize = islandBiome.textureTiling,
-         tileOffset = islandBiome.textureOffset
-     };
-     terrainData.terrainLayers = new TerrainLayer[] { newLayer };
-
-     // Apply the texture to the entire spawn island terrain
-     ApplyTextureToTerrain(newTerrain, islandCenter, newLayer);
-
-     int segments = Mathf.CeilToInt(Vector3.Distance(houseCoordinates[0], houseCoordinates[1]) / 1f); // Increase the number of segments
-     Vector3 direction = -(houseCoordinates[0] - houseCoordinates[1]) / segments;
-
-     for (int i = 0; i < segments; i++)
-     {
-         Vector3 start = houseCoordinates[0] + direction * i;
-         Vector3 end = houseCoordinates[0] + direction * (i + 1);
-
-         // Adjust the y-coordinate to match the terrain height
-         start.y = newTerrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
-         end.y = newTerrain.SampleHeight(end) + 0.1f;
-
-         CreateRoadBetween(start, end, newTerrain);
-     }
-
-     SpawnBiomeObjects(islandBiome, islandCenter);
-     
- }
-
     void PlaceWater()
     {
         if (waterPrefab == null)
