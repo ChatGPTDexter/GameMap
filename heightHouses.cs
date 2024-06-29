@@ -35,6 +35,8 @@ public class MapGenerator : MonoBehaviour
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
     public bool canclearmap = true;
+    public Dictionary<string, List<Vector3>> housePositionsByLabel = new Dictionary<string, List<Vector3>>();
+
 
     private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
     public Dictionary<string, bool> MasteredTopics => masteredTopics;
@@ -614,33 +616,35 @@ public class MapGenerator : MonoBehaviour
                 normalizedLength = 1.0f; // Default value in case parsing fails
             }
 
-            int numberOfHouses = Mathf.RoundToInt(normalizedLength); // Adjust this scaling factor as needed
+            int numberOfHouses = Mathf.RoundToInt(normalizedLength);
+            float radius = 50f;
+            float angleStep = 360f / numberOfHouses;
 
-            // Define the number of rows and columns for the rectangle
-            int columns = Mathf.CeilToInt(numberOfHouses / 2.0f); // Two columns for each side of the road
-            float xSpacing = 20f; // Spacing between houses in the x-direction
-            float zSpacing = 30f; // Increased distance from the road
+            housePositionsByLabel[label] = new List<Vector3>();
 
-            // Loop through to spawn houses
             for (int i = 0; i < numberOfHouses; i++)
             {
-                int column = i / 2;
-                int side = i % 2 == 0 ? 1 : -1;
+                float angle = i * angleStep;
+                Vector3 offset = new Vector3(
+                    Mathf.Cos(angle * Mathf.Deg2Rad) * radius,
+                    0,
+                    Mathf.Sin(angle * Mathf.Deg2Rad) * radius
+                );
 
-                // Calculate position for each house
-                float xOffset = column * xSpacing;
-                float zOffset = side * zSpacing;
-
-                Vector3 housePosition = mainPosition + new Vector3(xOffset, 0, zOffset);
+                Vector3 housePosition = mainPosition + offset;
                 float terrainHeight = terrain.SampleHeight(housePosition);
                 housePosition.y = terrainHeight;
 
-                // Instantiate the house prefab at the adjusted height
+                if (Vector3.Distance(housePosition, mainPosition) < 20f)
+                {
+                    housePosition += offset.normalized * 20f;
+                    housePosition.y = terrain.SampleHeight(housePosition);
+                }
+
                 GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
                 float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
                 GameObject house = Instantiate(housePrefab, new Vector3(housePosition.x, housePosition.y + (houseHeight / 2), housePosition.z), Quaternion.identity);
 
-                // Get house dimensions using MeshFilter bounds for more accuracy
                 MeshFilter meshFilter = house.GetComponent<MeshFilter>();
                 if (meshFilter != null)
                 {
@@ -648,7 +652,6 @@ public class MapGenerator : MonoBehaviour
                     Vector3 houseScale = house.transform.localScale;
                     houseSize = Vector3.Scale(houseSize, houseScale);
 
-                    // Instantiate the cube underneath the house
                     Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
                     GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
                     cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
@@ -660,10 +663,9 @@ public class MapGenerator : MonoBehaviour
                     Debug.LogError("House prefab does not have a MeshFilter component.");
                 }
 
-                // Generate a small road from the nearest point on the main road to each house
-                Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
-                Debug.Log($"Nearest point on main road for house at {housePosition} is {nearestPointOnMainRoad}");
-                GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
+                GenerateSmallRoad(mainPosition, housePosition, terrain);
+
+                housePositionsByLabel[label].Add(housePosition);
             }
         }
     }
