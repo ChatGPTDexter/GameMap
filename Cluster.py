@@ -9,8 +9,9 @@ from sklearn.preprocessing import MinMaxScaler
 import openai
 from dotenv import load_dotenv
 import os
-import networkx as nx
+from scipy.spatial import ConvexHull, distance
 from sklearn.metrics.pairwise import euclidean_distances
+
 # Load OpenAI API key from environment variable for security
 load_dotenv()
 api_key = os.getenv("apikey")
@@ -50,6 +51,7 @@ class ClusterCreator:
 
     def make_clusters(self):
         self.normalize_view_count()
+        self.normalize_transcript_length()
         
         embeddings = np.stack(self.workbench['embedding'])
         n_clusters = min(max(self.min_clusters, len(self.workbench) // self.min_nodes_per_cluster), self.max_clusters)
@@ -65,10 +67,10 @@ class ClusterCreator:
             umap_coords['cluster'] = cluster_id
             umap_coords['Label'] = cluster_data['Label'].values
             umap_coords['ViewCount'] = cluster_data['ViewCount'].values
+            umap_coords['TranscriptLength'] = cluster_data['TranscriptLength'].values  # Add transcript length
             umap_coords_list.append(umap_coords)
         
         self.umap_coords = pd.concat(umap_coords_list, ignore_index=True)
-        self.umap_coords[['x', 'y']] *= 400  # Scale UMAP coordinates by 100
 
         self.workbench = pd.merge(self.workbench, self.umap_coords, on=['Label', 'cluster'], how='left')
         self.workbench['z'] = self.workbench['NormalizedViewCount']  # Add normalized view counts as z-coordinate
@@ -77,10 +79,14 @@ class ClusterCreator:
         self.workbench['umap_coords'] = list(zip(self.workbench['x'], self.workbench['y']))
 
         self.assign_cluster_names()
-        self.space_out_clusters_and_points()
-        self.merge_overlapping_clusters()
+        self.arrange_clusters_around_center()
+        self.prevent_cluster_overlap()
+        self.space_out_points_within_clusters()  # Separate method for spacing out points within clusters
         self.create_minimum_spanning_trees()  # Corrected method name
         self.label_clusters()
+
+        # Scale the coordinates after all adjustments
+        self.workbench[['x', 'y']] *= 10
 
     def assign_cluster_names(self):
         self.cluster_names = {}
@@ -111,10 +117,15 @@ class ClusterCreator:
             print("Error: The final array is empty after removing invalid entries.")
             return
 
+        # Calculate transcript length and add to DataFrame
+        transcript_lengths = df['Transcript'].apply(lambda x: len(str(x).split())).tolist()
+        df['TranscriptLength'] = transcript_lengths
+
         embeddings = get_embeddings_batch(final_array)
         label_list = df['Title'].tolist()
         self.workbench = pd.DataFrame({'Label': label_list, 'embedding': list(embeddings)})
         self.workbench['ViewCount'] = df['ViewCount'].str.replace(',', '').astype(float)  # Clean and convert ViewCount to float
+        self.workbench['TranscriptLength'] = df['TranscriptLength']  # Add transcript length to workbench
 
     def create_connections(self):
         unique_clusters = set(self.workbench['cluster'])
@@ -165,14 +176,30 @@ class ClusterCreator:
         mst_df.to_csv(output_file, index=False)
         print(f"Minimum Spanning Trees saved to {output_file}")
 
-    def space_out_clusters_and_points(self):
+    def arrange_clusters_around_center(self):
+        centroids = self.workbench.groupby('cluster')[['x', 'y']].mean().values.astype(np.float64)
+        num_clusters = len(centroids)
+        radius = 400  # Adjust the radius to control the spread of clusters around the center point
+
+        # Arrange clusters in a circular pattern around the center point (0, 0)
+        for i, centroid in enumerate(centroids):
+            angle = 2 * np.pi * i / num_clusters
+            centroids[i] = [radius * np.cos(angle), radius * np.sin(angle)]
+
+        for cluster_id, centroid in enumerate(centroids):
+            cluster_points = self.workbench[self.workbench['cluster'] == cluster_id][['x', 'y']].values.astype(np.float64)
+            cluster_mean = cluster_points.mean(axis=0)
+            displacement = (centroid - cluster_mean).astype(np.float32)
+            self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']] = (self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']].values + displacement).astype(np.float32)
+
+    def prevent_cluster_overlap(self):
         centroids = self.workbench.groupby('cluster')[['x', 'y']].mean().values.astype(np.float64)
         max_iterations = 100
         learning_rate = 0.1
-        min_distance_between_clusters = .1  # Further reduced minimum distance between cluster centroids
-        spread_scale_within_clusters = 100  # Increased scale for spreading out points within clusters
+        min_distance_between_clusters = 50  # Adjust as needed to prevent overlap
 
         for _ in range(max_iterations):
+            moved = False
             for i in range(len(centroids)):
                 for j in range(i + 1, len(centroids)):
                     delta = centroids[j] - centroids[i]
@@ -181,6 +208,10 @@ class ClusterCreator:
                         adjustment = (min_distance_between_clusters - distance) * delta / distance * learning_rate
                         centroids[i] -= adjustment
                         centroids[j] += adjustment
+                        moved = True
+
+            if not moved:
+                break
 
         for cluster_id, centroid in enumerate(centroids):
             cluster_points = self.workbench[self.workbench['cluster'] == cluster_id][['x', 'y']].values.astype(np.float64)
@@ -188,7 +219,15 @@ class ClusterCreator:
             displacement = (centroid - cluster_mean).astype(np.float32)
             self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']] = (self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']].values + displacement).astype(np.float32)
 
-            self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']] = (self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']].values + np.random.normal(scale=spread_scale_within_clusters, size=cluster_points.shape)).astype(np.float32)
+    def space_out_points_within_clusters(self):
+        clusters = self.workbench['cluster'].unique()
+        spread_scale_within_clusters = 50  # Reduced scale for spreading out points within clusters
+
+        for cluster_id in clusters:
+            cluster_points = self.workbench[self.workbench['cluster'] == cluster_id][['x', 'y']].values.astype(np.float64)
+            cluster_center = cluster_points.mean(axis=0)
+            adjusted_points = cluster_points + np.random.normal(scale=spread_scale_within_clusters, size=cluster_points.shape)
+            self.workbench.loc[self.workbench['cluster'] == cluster_id, ['x', 'y']] = adjusted_points.astype(np.float32)
 
     def merge_overlapping_clusters(self):
         centroids = self.workbench.groupby('cluster')[['x', 'y']].mean().values.astype(np.float64)
@@ -213,8 +252,23 @@ class ClusterCreator:
         self.workbench.loc[self.workbench['cluster'] == cluster_id2, 'cluster'] = cluster_id1
 
     def normalize_view_count(self):
+        q1 = self.workbench['ViewCount'].quantile(0.25)
+        q3 = self.workbench['ViewCount'].quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        
+        # Cap the outliers
+        self.workbench['ViewCount'] = np.where(self.workbench['ViewCount'] < lower_bound, lower_bound, self.workbench['ViewCount'])
+        self.workbench['ViewCount'] = np.where(self.workbench['ViewCount'] > upper_bound, upper_bound, self.workbench['ViewCount'])
+
         scaler = MinMaxScaler(feature_range=(5, 60))
         self.workbench['NormalizedViewCount'] = scaler.fit_transform(self.workbench[['ViewCount']])
+
+    def normalize_transcript_length(self):
+        scaler = MinMaxScaler(feature_range=(1, 10))  # Adjust range as needed
+        self.workbench['NormalizedTranscriptLength'] = scaler.fit_transform(self.workbench[['TranscriptLength']])
+        self.workbench['NormalizedTranscriptLength'] = self.workbench['NormalizedTranscriptLength'].round()  # Round to nearest whole number
 
     def label_clusters(self):
         unique_clusters = self.workbench['cluster'].unique()
@@ -222,9 +276,9 @@ class ClusterCreator:
         self.workbench['ClusterLabel'] = self.workbench['cluster'].map(cluster_label_mapping)
 
     def save_to_files(self):
-        self.workbench[['x', 'y', 'z', 'cluster', 'Label']].to_csv('umap_coordinates.csv', index=False)
+        self.workbench[['x', 'y', 'z', 'cluster', 'Label', 'NormalizedTranscriptLength']].to_csv('umap_coordinates.csv', index=False)
         self.workbench[['ClusterLabel']].to_csv('cluster_labels.csv', index=False)
-   
+
     def plot_clusters_and_connections_with_mst(self):
         fig, ax = plt.subplots(figsize=(15, 10))
 
@@ -250,10 +304,19 @@ class ClusterCreator:
                         [cluster_coords[start, 1], cluster_coords[end, 1]],
                         c=color, alpha=0.5, linewidth=1.5)
 
+            # Draw convex hull
+            if len(cluster_coords) >= 3:
+                hull = ConvexHull(cluster_coords)
+                for simplex in hull.simplices:
+                    ax.plot(cluster_coords[simplex, 0], cluster_coords[simplex, 1], linestyle='--', color=color, alpha=0.8)
+
+        # Plot the central point
+        ax.scatter(0, 0, c='black', s=100, marker='x', label='Center Point')
+
         ax.set_xlabel('UMAP x-coordinate')
         ax.set_ylabel('UMAP y-coordinate')
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.title('2D Visualization of Clusters with Minimum Spanning Trees')
+        plt.title('2D Visualization of Clusters with Minimum Spanning Trees and Convex Hulls')
         plt.tight_layout()
         plt.show()
 
