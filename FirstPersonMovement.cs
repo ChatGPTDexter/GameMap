@@ -11,11 +11,12 @@ public class FirstPersonMovement : MonoBehaviour
     public KeyCode runningKey = KeyCode.LeftShift;
     public float interactionRadius = 10f;
 
-    private Rigidbody rigidbody;
+    new Rigidbody rigidbody;
     public List<System.Func<float>> speedOverrides = new List<System.Func<float>>();
 
     private bool isMovementEnabled = true;
     private CharacterAI activeCharacter;
+    private SpawnCharacterAI SactiveCharacter;
     private CharacterSpawner characterSpawner;
 
     void Awake()
@@ -41,6 +42,10 @@ public class FirstPersonMovement : MonoBehaviour
         {
             return;
         }
+        else if (SactiveCharacter != null && SactiveCharacter.userInputField != null && SactiveCharacter.userInputField.isFocused)
+        {
+            return;
+        }
 
         if (Input.GetKeyDown(KeyCode.Q))
         {
@@ -52,6 +57,10 @@ public class FirstPersonMovement : MonoBehaviour
     {
         // Skip other actions if the input field is focused
         if (activeCharacter != null && activeCharacter.userInputField != null && activeCharacter.userInputField.isFocused)
+        {
+            return;
+        }
+        else if (SactiveCharacter != null && SactiveCharacter.userInputField != null && SactiveCharacter.userInputField.isFocused)
         {
             return;
         }
@@ -93,12 +102,22 @@ public class FirstPersonMovement : MonoBehaviour
 
     private void InteractWithCharacter()
     {
-        CharacterAI closestCharacter = characterSpawner.GetClosestCharacter(transform.position, interactionRadius);
+        var closestCharacter = characterSpawner.GetClosestCharacter(transform.position, interactionRadius);
+
         if (closestCharacter != null)
         {
-            activeCharacter = closestCharacter;
-            activeCharacter.EnableInteraction();
-            DisableMovement();
+            if (closestCharacter is CharacterAI characterAI)
+            {
+                activeCharacter = characterAI;  // Cast to CharacterAI
+                activeCharacter.EnableInteraction();
+                DisableMovement();
+            }
+            else if (closestCharacter is SpawnCharacterAI spawnCharacterAI)
+            {
+                SactiveCharacter = spawnCharacterAI;  // Cast to SpawnCharacterAI
+                SactiveCharacter.EnableInteraction();
+                DisableMovement();
+            }
         }
     }
 
@@ -110,6 +129,11 @@ public class FirstPersonMovement : MonoBehaviour
         {
             activeCharacter.DisableInteraction();
             activeCharacter = null;
+        }
+        else if (SactiveCharacter != null)
+        { 
+        SactiveCharacter.DisableInteraction();
+        SactiveCharacter = null;
         }
     }
 
