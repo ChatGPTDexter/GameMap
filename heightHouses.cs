@@ -4,6 +4,7 @@ using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
 using TMPro;
+using System.Linq;
 
 public class MapGenerator : MonoBehaviour
 {
@@ -11,16 +12,10 @@ public class MapGenerator : MonoBehaviour
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public List<GameObject> housePrefabs; // Assign multiple house prefabs here
     public GameObject roadPrefab; // Assign your road prefab here
-    public List<GameObject> treePrefabs; // Assign tree prefabs here
-    public List<GameObject> rockPrefabs; // Assign rock prefabs here
+    public List<Biome> biomes; // Assign biomes here
     public Terrain terrain; // Assign the Terrain object here in the Inspector
     public float elevationFactor = 0.01f; // Factor to control terrain elevation
     public Material roadMaterial; // Assign the material for the roads here
-    public int numTrees = 100; // Number of trees to spawn
-    public int numRocks = 50; // Number of rocks to spawn
-    public Texture2D textureToAdd; // The new texture layer to add
-    public Vector2 textureOffset = Vector2.zero; // Offset of the texture layer
-    public Vector2 textureTiling = Vector2.one; // Tiling of the texture layer
     public GameObject waterPrefab; // Assign the water prefab here
     public float waterHeight = 2f; // Height of the water
     public float checkRadius = 10f; // Radius to check for nearby houses
@@ -30,15 +25,21 @@ public class MapGenerator : MonoBehaviour
     public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
     private Dictionary<string, Vector3> housePositions = new Dictionary<string, Vector3>();
     private List<Vector3> roadPositions = new List<Vector3>(); // Store road positions
-    private float[,] originalHeights; // Store original terrain heights
+    private Dictionary<int, List<Vector3>> clusters = new Dictionary<int, List<Vector3>>(); // Store clusters
+    private Dictionary<int, Biome> clusterBiomes = new Dictionary<int, Biome>(); // Store assigned biomes for each cluster
+    private Dictionary<int, Terrain> clusterTerrains = new Dictionary<int, Terrain>(); // Store terrains for each cluster
+    private Dictionary<int, float[,]> originalHeights = new Dictionary<int, float[,]>(); // Store original terrain heights for each cluster
     private float minX = float.MaxValue, maxX = float.MinValue;
     private float minZ = float.MaxValue, maxZ = float.MinValue;
     public bool canclearmap = true;
 
+    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
+    public Dictionary<string, bool> MasteredTopics => masteredTopics;
+    public Dictionary<int, List<string>> clusterLabels = new Dictionary<int, List<string>>();
+    private Dictionary<string, float> houseTranscriptLengths = new Dictionary<string, float>();
+
     void Start()
     {
-        Debug.Log("MapGenerator Start");
-
         if (houseCsvFile == null || mstCsvFile == null)
         {
             Debug.LogError("CSV files not assigned. Please assign CSV files in the Inspector.");
@@ -51,6 +52,12 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
+        if (biomes == null || biomes.Count == 0)
+        {
+            Debug.LogError("Biomes not assigned. Please assign biomes in the Inspector.");
+            return;
+        }
+
         if (terrain == null)
         {
             Debug.LogError("Terrain not assigned. Please assign Terrain in the Inspector.");
@@ -59,16 +66,23 @@ public class MapGenerator : MonoBehaviour
 
         CalculateTerrainSize();
         AdjustTerrainSize();
-        originalHeights = terrain.terrainData.GetHeights(0, 0, terrain.terrainData.heightmapResolution, terrain.terrainData.heightmapResolution);
         GenerateMapFromCSV();
-        AddTerrainLayer();
+        AssignBiomesToClusters();
+        ApplyBiomeTextures();
         SpawnTreesAndRocks();
         RemoveTreesBelowHeight(3f);
         PlaceWater(); // Add water layer
+
+        GenerateMainRoadFromMST(); // Ensure road positions are populated
+        if (roadPositions.Count == 0)
+        {
+            Debug.LogError("No road positions generated. Please check the MST CSV file.");
+            return;
+        }
+
         InstantiateHouses(); // Instantiate and position the houses after terrain generation
         SetupMiniMap(); // Setup the mini-map
     }
-
     void CalculateTerrainSize()
     {
         StringReader reader = new StringReader(houseCsvFile.text);
@@ -197,8 +211,11 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
-        // Clear existing house positions
+        // Clear existing house positions and transcript lengths
         housePositions.Clear();
+        houseTranscriptLengths.Clear();
+        clusters.Clear();
+        clusterLabels.Clear();
 
         while (reader.Peek() != -1)
         {
@@ -210,7 +227,7 @@ public class MapGenerator : MonoBehaviour
 
             string[] fields = ParseCSVLine(line);
 
-            if (fields.Length < 4)
+            if (fields.Length < 6)
             {
                 Debug.LogWarning($"Skipping invalid row: {line}");
                 continue;
@@ -219,157 +236,111 @@ public class MapGenerator : MonoBehaviour
             string label = fields[4].Trim('"'); // Trim quotes from the label
             if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
                 float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
-                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+                float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
+                int.TryParse(fields[3], out int clusterId) && // Read cluster ID
+                float.TryParse(fields[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float normalizedLength)) // Read NormalizedTranscriptLength
             {
                 Vector3 position = new Vector3(x, y, z);
                 housePositions[label] = position;
+                houseTranscriptLengths[label] = normalizedLength;
+
+                if (!clusters.ContainsKey(clusterId))
+                {
+                    clusters[clusterId] = new List<Vector3>();
+                }
+                clusters[clusterId].Add(position);
+
+                if (!clusterLabels.ContainsKey(clusterId))
+                {
+                    clusterLabels[clusterId] = new List<string>();
+                }
+                clusterLabels[clusterId].Add(label);
             }
             else
             {
-                Debug.LogWarning($"Failed to parse coordinates or view count: {line}");
+                Debug.LogWarning($"Failed to parse coordinates or other fields: {line}");
             }
         }
 
-        // Create an influence map for the entire terrain
-        int xResolution = terrain.terrainData.heightmapResolution;
-        int zResolution = terrain.terrainData.heightmapResolution;
-        float[,] influenceMap = new float[xResolution, zResolution];
+        GenerateClusterTerrains(); // Generate terrains for each cluster
 
-        foreach (var houseEntry in housePositions)
+        foreach (var cluster in clusters)
         {
-            Vector3 position = houseEntry.Value;
-            AddInfluenceToMap(influenceMap, position);
-        }
-
-        // Apply the influence map to the terrain
-        ApplyInfluenceMapToTerrain(influenceMap);
-
-        // Generate roads after terrain modification
-        GenerateRoadsFromMST();
-    }
-
-    float GetHighestNearbyHouseY(Vector3 position)
-    {
-        float highestY = position.y;
-        foreach (Vector3 housePosition in housePositions.Values)
-        {
-            if (Vector3.Distance(position, housePosition) < checkRadius && housePosition.y > highestY)
+            foreach (var position in cluster.Value)
             {
-                highestY = housePosition.y;
+                ElevateTerrainAround(clusterTerrains[cluster.Key], position);
             }
         }
-        return highestY;
+
+        // Generate main roads from MST after terrain modification
+        GenerateMainRoadFromMST();
     }
 
-    void AddInfluenceToMap(float[,] influenceMap, Vector3 position)
+    void GenerateClusterTerrains()
     {
-        TerrainData terrainData = terrain.terrainData;
-        Vector3 terrainPos = terrain.transform.position;
-
-        int xResolution = terrainData.heightmapResolution;
-        int zResolution = terrainData.heightmapResolution;
-
-        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
-        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
-
-        int radius = CalculateAdjustedDistance(position) * 2; // Increase radius for wider influence
-
-        for (int x = 0; x < xResolution; x++)
+        foreach (var cluster in clusters)
         {
-            for (int z = 0; z < zResolution; z++)
+            Vector3 clusterMin = new Vector3(float.MaxValue, 0, float.MaxValue);
+            Vector3 clusterMax = new Vector3(float.MinValue, 0, float.MinValue);
+
+            foreach (var position in cluster.Value)
             {
-                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX, relativeZ));
-                if (distance <= radius)
-                {
-                    float influence = CalculateInfluence(distance, radius, position.y * elevationFactor);
-                    influenceMap[x, z] += influence; // Accumulate influence
-                }
+                if (position.x < clusterMin.x) clusterMin.x = position.x;
+                if (position.x > clusterMax.x) clusterMax.x = position.x;
+                if (position.z < clusterMin.z) clusterMin.z = position.z;
+                if (position.z > clusterMax.z) clusterMax.z = position.z;
             }
+
+            TerrainData terrainData = new TerrainData();
+            terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
+            terrainData.size = new Vector3(clusterMax.x - clusterMin.x + 100, terrain.terrainData.size.y, clusterMax.z - clusterMin.z + 100);
+            GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
+            Terrain newTerrain = terrainObject.GetComponent<Terrain>();
+            newTerrain.transform.position = new Vector3(clusterMin.x - 50, 0, clusterMin.z - 50);
+            clusterTerrains[cluster.Key] = newTerrain;
+
+            float[,] heights = new float[terrainData.heightmapResolution, terrainData.heightmapResolution];
+            originalHeights[cluster.Key] = heights;
+            terrainData.SetHeights(0, 0, heights);
+
+            // Blend the edges of the terrain to smoothly transition to the water level
+            BlendTerrainEdges(newTerrain);
         }
     }
-    float CalculateInfluence(float distance, float radius, float maxElevation)
-    {
-        float normalizedDistance = distance / radius;
-        float falloff = 1 - Mathf.Pow(normalizedDistance, 2); // Quadratic falloff for smoother transition
-        return maxElevation * falloff;
-    }
 
-    void ApplyInfluenceMapToTerrain(float[,] influenceMap)
+    void BlendTerrainEdges(Terrain terrain)
     {
         TerrainData terrainData = terrain.terrainData;
-        int xResolution = terrainData.heightmapResolution;
-        int zResolution = terrainData.heightmapResolution;
+        int resolution = terrainData.heightmapResolution;
+        float[,] heights = terrainData.GetHeights(0, 0, resolution, resolution);
 
-        float[,] heights = terrainData.GetHeights(0, 0, xResolution, zResolution);
-
-        float maxInfluence = 0f;
-        for (int x = 0; x < xResolution; x++)
+        for (int i = 0; i < resolution; i++)
         {
-            for (int z = 0; z < zResolution; z++)
+            for (int j = 0; j < resolution; j++)
             {
-                maxInfluence = Mathf.Max(maxInfluence, influenceMap[x, z]);
-            }
-        }
-
-        for (int x = 0; x < xResolution; x++)
-        {
-            for (int z = 0; z < zResolution; z++)
-            {
-                float normalizedInfluence = influenceMap[x, z] / maxInfluence;
-                float smoothedInfluence = Mathf.SmoothStep(0, 1, normalizedInfluence);
-                heights[x, z] += smoothedInfluence * 0.1f; // Adjust the multiplier to control overall elevation
+                float distanceToEdge = Mathf.Min(i, j, resolution - i - 1, resolution - j - 1);
+                float blendFactor = Mathf.Clamp01(distanceToEdge / (resolution * 0.1f)); // Blend within 10% of the terrain size
+                heights[i, j] = Mathf.Lerp(waterHeight / terrainData.size.y, heights[i, j], blendFactor);
             }
         }
 
         terrainData.SetHeights(0, 0, heights);
     }
-    void AdjustTerrainAroundHouse(Vector3 position, float houseHeight)
+
+    float CalculateSmootherParabolicHeightIncrement(float distance, float maxElevation, int radius)
     {
-        TerrainData terrainData = terrain.terrainData;
-        Vector3 terrainPos = terrain.transform.position;
+        float maxDistance = radius;
 
-        int xResolution = terrainData.heightmapResolution;
-        int zResolution = terrainData.heightmapResolution;
+        // Smoother parabolic falloff effect
+        if (distance > maxDistance) return 0;
 
-        // Convert position to terrain coordinates
-        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
-        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+        float normalizedDistance = distance / maxDistance;
+        float heightIncrement = maxElevation * (1 - Mathf.Pow(normalizedDistance, 3)); // Smoother parabolic curve
 
-        // Define the area around the position to check and adjust
-        int radius = 7; // Smaller radius for smoother transition
-        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
-        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
-        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
-        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
-
-        // Get the current heights in the area
-        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
-
-        // Adjust terrain heights with smooth transition
-        for (int x = 0; x < heights.GetLength(0); x++)
-        {
-            for (int z = 0; x < heights.GetLength(1); z++)
-            {
-                float terrainHeight = heights[x, z] * terrainData.size.y + terrainPos.y;
-                float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
-                float falloff = Mathf.Clamp01(1 - (distance / radius));
-
-                if (terrainHeight > houseHeight - 5)
-                {
-                    heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
-                }
-                else if (terrainHeight < houseHeight - 4)
-                {
-                    heights[x, z] = Mathf.Lerp(heights[x, z], (houseHeight - terrainPos.y) / terrainData.size.y, falloff);
-                }
-            }
-        }
-
-        // Set the modified heights back to the terrain
-        terrainData.SetHeights(startX, startZ, heights);
+        return heightIncrement;
     }
 
-    void ElevateTerrainAround(Vector3 position)
+    void ElevateTerrainAround(Terrain terrain, Vector3 position)
     {
         Debug.Log($"Elevating terrain around position: {position}");
 
@@ -383,8 +354,7 @@ public class MapGenerator : MonoBehaviour
         float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
         float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
 
-        // Increase the radius for wider mounds
-        int radius = CalculateAdjustedDistance(position);
+        int radius = 100; // Increase the radius for larger mounds
         int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
@@ -395,23 +365,21 @@ public class MapGenerator : MonoBehaviour
         // Get the current heights
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
 
-        // Calculate maximum elevation based on elevation factor
-        float maxElevation = Mathf.Min(20f, position.y * elevationFactor) / terrainData.size.y; // Further reduced max elevation
+        // Calculate maximum elevation based on z-coordinate from CSV
+        float maxElevation = position.y / terrainData.size.y;
 
-        // Calculate falloff based on distance from the center
+        // Calculate height increment using smoother parabolic function and blending with existing heights
         for (int x = 0; x < heights.GetLength(0); x++)
         {
             for (int z = 0; z < heights.GetLength(1); z++)
             {
-                // Calculate distance from center of the area
                 float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
 
-                // Calculate height increment based on maximum elevation and falloff
-                float heightIncrement = CalculateHeightIncrement(distance, maxElevation, radius);
+                // Smoother parabolic height increment
+                float heightIncrement = CalculateSmootherParabolicHeightIncrement(distance, maxElevation, radius);
 
-                // Smooth blending with existing height
-                float blendFactor = Mathf.SmoothStep(0, 1, heightIncrement / maxElevation);
-                heights[x, z] = Mathf.Lerp(heights[x, z], heights[x, z] + heightIncrement, blendFactor);
+                // Blend the new height increment with the existing height
+                heights[x, z] = Mathf.Max(heights[x, z], heightIncrement);
             }
         }
 
@@ -420,61 +388,84 @@ public class MapGenerator : MonoBehaviour
         Debug.Log("Terrain elevation applied");
     }
 
-
-    void AddTerrainLayer()
+    void AssignBiomesToClusters()
     {
-        if (terrain == null || textureToAdd == null)
+        System.Random random = new System.Random();
+        List<Biome> availableBiomes = new List<Biome>(biomes);
+
+        foreach (var cluster in clusters)
         {
-            Debug.LogError("Terrain or texture to add not assigned.");
-            return;
+            int biomeIndex = random.Next(availableBiomes.Count);
+            Biome biome = availableBiomes[biomeIndex];
+            clusterBiomes[cluster.Key] = biome;
+
+            // Remove biome from the list if you want unique biomes per cluster
+            availableBiomes.RemoveAt(biomeIndex);
         }
+    }
 
-        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
-
-        // Check if the texture layer already exists
-        foreach (TerrainLayer layer in terrainLayers)
+    void ApplyBiomeTextures()
+    {
+        foreach (var cluster in clusters)
         {
-            if (layer.diffuseTexture == textureToAdd)
+            Biome biome = clusterBiomes[cluster.Key];
+            Terrain terrain = clusterTerrains[cluster.Key];
+            TerrainData terrainData = terrain.terrainData;
+            List<TerrainLayer> terrainLayers = new List<TerrainLayer>(terrainData.terrainLayers);
+
+            TerrainLayer newLayer = new TerrainLayer
             {
-                Debug.LogWarning("Texture layer already exists on the terrain.");
-                return;
+                diffuseTexture = biome.terrainTexture,
+                tileSize = biome.textureTiling,
+                tileOffset = biome.textureOffset
+            };
+            terrainLayers.Add(newLayer);
+            terrainData.terrainLayers = terrainLayers.ToArray();
+
+            foreach (var position in cluster.Value)
+            {
+                ApplyTextureToTerrain(terrain, position, newLayer);
+            }
+
+            Debug.Log("Biome textures applied successfully.");
+        }
+    }
+
+    void ApplyTextureToTerrain(Terrain terrain, Vector3 position, TerrainLayer layer)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.alphamapWidth;
+        int zResolution = terrainData.alphamapHeight;
+
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        int radius = 20; // Define a radius for the biome area
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+        float[,,] alphamaps = terrainData.GetAlphamaps(startX, startZ, endX - startX, endZ - startZ);
+        int layerIndex = Array.IndexOf(terrainData.terrainLayers, layer);
+
+        for (int x = 0; x < alphamaps.GetLength(0); x++)
+        {
+            for (int z = 0; z < alphamaps.GetLength(1); z++)
+            {
+                alphamaps[x, z, layerIndex] = 1;
             }
         }
 
-        // Create a new terrain layer with the provided texture
-        TerrainLayer newLayer = new TerrainLayer
-        {
-            diffuseTexture = textureToAdd,
-            tileSize = textureTiling,
-            tileOffset = textureOffset
-        };
-
-        // Add the new layer to the list of terrain layers
-        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
-        newLayersList.Add(newLayer);
-
-        // Update the terrain's terrain layers
-        terrain.terrainData.terrainLayers = newLayersList.ToArray();
-
-        Debug.Log("Terrain layer added successfully.");
+        terrainData.SetAlphamaps(startX, startZ, alphamaps);
     }
 
-    float CalculateHeightIncrement(float distance, float maxElevation, int radius)
+    
+    void GenerateMainRoadFromMST()
     {
-        float maxDistance = radius;
-        float falloffExponent = 0.2f; // Even lower value for more gradual falloff
-
-        // Remove plateau effect for smoother mounds
-        float falloff = Mathf.Pow(1 - Mathf.Clamp01(distance / maxDistance), falloffExponent);
-
-        // Calculate height increment with more gradual falloff
-        float heightIncrement = maxElevation * falloff;
-
-        return heightIncrement;
-    }
-    void GenerateRoadsFromMST()
-    {
-        Debug.Log("GenerateRoadsFromMST");
+        Debug.Log("GenerateMainRoadFromMST");
 
         StringReader reader = new StringReader(mstCsvFile.text);
 
@@ -502,14 +493,14 @@ public class MapGenerator : MonoBehaviour
                 continue;
             }
 
-            string house1 = fields[1].Trim('"'); // Trim quotes from the house labels
+            string house1 = fields[1].Trim('"');
             string house2 = fields[2].Trim('"');
 
             if (housePositions.ContainsKey(house1) && housePositions.ContainsKey(house2))
             {
                 Vector3 position1 = housePositions[house1];
                 Vector3 position2 = housePositions[house2];
-                GenerateRoadSegment(position1, position2);
+                GenerateMainRoad(position1, position2);
             }
             else
             {
@@ -525,35 +516,122 @@ public class MapGenerator : MonoBehaviour
             }
         }
     }
-
-    void GenerateRoadSegment(Vector3 position1, Vector3 position2)
+    void InstantiateHouses()
     {
-        Debug.Log($"Generating road segment between {position1} and {position2}");
-
-        // Calculate the number of segments based on the distance
-        int segments = Mathf.CeilToInt(Vector3.Distance(position1, position2) / 1f); // Increase the number of segments
-        Vector3 direction = (position2 - position1) / segments;
-
-        for (int i = 0; i < segments; i++)
+        foreach (var houseEntry in housePositions)
         {
-            Vector3 start = position1 + direction * i;
-            Vector3 end = position1 + direction * (i + 1);
+            Vector3 mainPosition = houseEntry.Value;
+            string label = houseEntry.Key;
+            int clusterId = clusters.First(c => c.Value.Contains(mainPosition)).Key;
+            Terrain terrain = clusterTerrains[clusterId];
 
-            // Adjust the y-coordinate to match the terrain height
-            start.y = terrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
-            end.y = terrain.SampleHeight(end) + 0.1f;
+            if (!houseTranscriptLengths.TryGetValue(label, out float normalizedLength))
+            {
+                Debug.LogWarning($"NormalizedTranscriptLength not found for label: {label}");
+                normalizedLength = 1.0f; // Default value in case parsing fails
+            }
 
-            CreateRoadBetween(start, end);
+            int numberOfHouses = Mathf.RoundToInt(normalizedLength); // Adjust this scaling factor as needed
+
+            // Define the number of rows and columns for the rectangle
+            int columns = Mathf.CeilToInt(numberOfHouses / 2.0f); // Two columns for each side of the road
+            float xSpacing = 20f; // Spacing between houses in the x-direction
+            float zSpacing = 30f; // Increased distance from the road
+
+            // Loop through to spawn houses
+            for (int i = 0; i < numberOfHouses; i++)
+            {
+                int column = i / 2;
+                int side = i % 2 == 0 ? 1 : -1;
+
+                // Calculate position for each house
+                float xOffset = column * xSpacing;
+                float zOffset = side * zSpacing;
+
+                Vector3 housePosition = mainPosition + new Vector3(xOffset, 0, zOffset);
+                float terrainHeight = terrain.SampleHeight(housePosition);
+                housePosition.y = terrainHeight;
+
+                // Instantiate the house prefab at the adjusted height
+                GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+                float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+                GameObject house = Instantiate(housePrefab, new Vector3(housePosition.x, housePosition.y + (houseHeight / 2), housePosition.z), Quaternion.identity);
+
+                // Get house dimensions using MeshFilter bounds for more accuracy
+                MeshFilter meshFilter = house.GetComponent<MeshFilter>();
+                if (meshFilter != null)
+                {
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    // Instantiate the cube underneath the house
+                    Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
+                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
+                }
+                else
+                {
+                    Debug.LogError("House prefab does not have a MeshFilter component.");
+                }
+
+                // Generate a small road from the nearest point on the main road to each house
+                Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
+                Debug.Log($"Nearest point on main road for house at {housePosition} is {nearestPointOnMainRoad}");
+                GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
+            }
         }
     }
 
-    void CreateRoadBetween(Vector3 position1, Vector3 position2)
+    Vector3 GetNearestPointOnMainRoad(Vector3 housePosition)
+    {
+        // Find the nearest point on the main road using the road positions
+        Vector3 nearestPoint = roadPositions[0];
+        float minDistance = Vector3.Distance(housePosition, roadPositions[0]);
+
+        foreach (Vector3 roadPosition in roadPositions)
+        {
+            float distance = Vector3.Distance(housePosition, roadPosition);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                nearestPoint = roadPosition;
+            }
+        }
+
+        return nearestPoint;
+    }
+
+    void GenerateSmallRoad(Vector3 mainRoadPosition, Vector3 housePosition, Terrain terrain)
+    {
+        Debug.Log($"Generating small road between {mainRoadPosition} and {housePosition}");
+
+        // Calculate the number of segments based on the distance
+        int segments = Mathf.CeilToInt(Vector3.Distance(mainRoadPosition, housePosition) / 1f); // Increase the number of segments
+        Vector3 direction = (housePosition - mainRoadPosition) / segments;
+
+        for (int i = 0; i < segments; i++)
+        {
+            Vector3 segmentStart = mainRoadPosition + direction * i;
+            Vector3 segmentEnd = mainRoadPosition + direction * (i + 1);
+
+            // Adjust the y-coordinate to match the terrain height
+            segmentStart.y = terrain.SampleHeight(segmentStart) + 0.1f; // Slightly above the terrain
+            segmentEnd.y = terrain.SampleHeight(segmentEnd) + 0.1f;
+
+            CreateRoadBetween(segmentStart, segmentEnd, terrain);
+        }
+    }
+
+    void CreateRoadBetween(Vector3 position1, Vector3 position2, Terrain terrain)
     {
         Debug.Log($"Creating road between {position1} and {position2}");
 
         Vector3 midPoint = (position1 + position2) / 2;
         float roadLength = Vector3.Distance(position1, position2);
-        float roadWidth = 0.1f; // Adjust road width to smaller size
+        float roadWidth = 0.2f; // Adjust road width to smaller size
         float minHeightAboveWater = waterHeight + 0.1f; // Minimum height of the road above the water
 
         GameObject road = Instantiate(roadPrefab, midPoint, Quaternion.identity);
@@ -580,69 +658,37 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-    void SpawnTreesAndRocks()
+    void GenerateMainRoad(Vector3 position1, Vector3 position2)
     {
-        for (int i = 0; i < numTrees; i++)
+        Debug.Log($"Generating main road segment between {position1} and {position2}");
+
+        // Find the cluster ID for the start and end positions
+        int clusterId1 = clusters.First(c => c.Value.Contains(position1)).Key;
+        int clusterId2 = clusters.First(c => c.Value.Contains(position2)).Key;
+
+        if (clusterId1 != clusterId2)
         {
-            SpawnObject(treePrefabs);
+            Debug.LogWarning($"Cannot generate main road segment between different clusters: {clusterId1} and {clusterId2}");
+            return;
         }
 
-        for (int i = 0; i < numRocks; i++)
+        Terrain terrain = clusterTerrains[clusterId1];
+
+        // Calculate the number of segments based on the distance
+        int segments = Mathf.CeilToInt(Vector3.Distance(position1, position2) / 1f); // Increase the number of segments
+        Vector3 direction = (position2 - position1) / segments;
+
+        for (int i = 0; i < segments; i++)
         {
-            SpawnObject(rockPrefabs);
+            Vector3 start = position1 + direction * i;
+            Vector3 end = position1 + direction * (i + 1);
+
+            // Adjust the y-coordinate to match the terrain height
+            start.y = terrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
+            end.y = terrain.SampleHeight(end) + 0.1f;
+
+            CreateRoadBetween(start, end, terrain);
         }
-    }
-
-    void SpawnObject(List<GameObject> prefabs)
-    {
-        if (prefabs.Count == 0) return;
-
-        Vector3 position;
-        int attempts = 0;
-        bool validPosition = false;
-
-        do
-        {
-            float x = UnityEngine.Random.Range(terrain.transform.position.x, terrain.transform.position.x + terrain.terrainData.size.x);
-            float z = UnityEngine.Random.Range(terrain.transform.position.z, terrain.transform.position.z + terrain.terrainData.size.z);
-            position = new Vector3(x, terrain.SampleHeight(new Vector3(x, 0, z)) + 0.1f, z);
-
-            validPosition = IsValidSpawnPosition(position);
-            attempts++;
-        } while (!validPosition && attempts < 10);
-
-        if (validPosition)
-        {
-            GameObject prefab = prefabs[UnityEngine.Random.Range(0, prefabs.Count)];
-            Instantiate(prefab, position, Quaternion.identity);
-        }
-    }
-
-    bool IsValidSpawnPosition(Vector3 position)
-    {
-        // Avoid water
-        if (position.y < waterHeight + 0.1f) // Allow a slight margin above the water
-        {
-            return false;
-        }
-
-        foreach (Vector3 housePosition in housePositions.Values)
-        {
-            if (Vector3.Distance(position, housePosition) < 5f) // Adjust the minimum distance as needed
-            {
-                return false;
-            }
-        }
-
-        foreach (Vector3 roadPosition in roadPositions)
-        {
-            if (Vector3.Distance(position, roadPosition) < 2f) // Adjust the minimum distance as needed
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     string[] ParseCSVLine(string line)
@@ -677,43 +723,75 @@ public class MapGenerator : MonoBehaviour
 
         return fields.ToArray();
     }
-
-    public int CalculateAdjustedDistance(Vector3 position)
+    void SpawnTreesAndRocks()
     {
-        float nearestDistance = float.MaxValue;
-
-        foreach (var houseEntry in housePositions)
+        foreach (var cluster in clusters)
         {
-            Vector3 housePosition = houseEntry.Value;
-            // Calculate horizontal distance using only x and z coordinates
-            float distance = Vector2.Distance(new Vector2(position.x, position.z), new Vector2(housePosition.x, housePosition.z));
-
-            // Skip if the distance is 0
-            if (distance == 0)
+            Biome biome = clusterBiomes[cluster.Key];
+            foreach (var position in cluster.Value)
             {
-                continue;
+                SpawnBiomeObjects(biome, position);
             }
-
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-            }
-        }
-
-        if (nearestDistance == float.MaxValue)
-        {
-            return 0; // No valid distance found
-        }
-        else if (nearestDistance < 75)
-        {
-            return Mathf.RoundToInt(nearestDistance / 5);
-        }
-        else
-        {
-            return 25;
         }
     }
+    void SpawnBiomeObjects(Biome biome, Vector3 clusterCenter)
+    {
+        for (int i = 0; i < 50; i++) // Example number of objects to spawn per cluster
+        {
+            SpawnObject(biome.treePrefabs, clusterCenter);
+            SpawnObject(biome.rockPrefabs, clusterCenter);
+        }
+    }
+    void SpawnObject(List<GameObject> prefabs, Vector3 clusterCenter)
+    {
+        if (prefabs.Count == 0) return;
 
+        Vector3 position;
+        int attempts = 0;
+        bool validPosition = false;
+
+        do
+        {
+            float x = UnityEngine.Random.Range(clusterCenter.x - 50, clusterCenter.x + 50);
+            float z = UnityEngine.Random.Range(clusterCenter.z - 50, clusterCenter.z + 50);
+            position = new Vector3(x, terrain.SampleHeight(new Vector3(x, 0, z)) + 0.1f, z);
+
+            validPosition = IsValidSpawnPosition(position);
+            attempts++;
+        } while (!validPosition && attempts < 10);
+
+        if (validPosition)
+        {
+            GameObject prefab = prefabs[UnityEngine.Random.Range(0, prefabs.Count)];
+            Instantiate(prefab, position, Quaternion.identity);
+        }
+    }
+    bool IsValidSpawnPosition(Vector3 position)
+    {
+        // Avoid water
+        if (position.y < waterHeight + 0.1f) // Allow a slight margin above the water
+        {
+            return false;
+        }
+
+        foreach (Vector3 housePosition in housePositions.Values)
+        {
+            if (Vector3.Distance(position, housePosition) < 5f) // Adjust the minimum distance as needed
+            {
+                return false;
+            }
+        }
+
+        foreach (Vector3 roadPosition in roadPositions)
+        {
+            if (Vector3.Distance(position, roadPosition) < 2f) // Adjust the minimum distance as needed
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
     void SetupMiniMap()
     {
         miniMapController.minX = minX;
@@ -723,48 +801,6 @@ public class MapGenerator : MonoBehaviour
         miniMapController.SetupMiniMap();
     }
 
-    void InstantiateHouses()
-    {
-        foreach (var houseEntry in housePositions)
-        {
-            Vector3 position = houseEntry.Value;
-
-            try
-            {
-                // Get the corrected height for the house position
-                float terrainHeight = terrain.SampleHeight(position);
-
-                // Instantiate the house prefab at the adjusted height
-                GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-                float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
-                GameObject house = Instantiate(housePrefab, new Vector3(position.x, terrainHeight + (houseHeight / 2), position.z), Quaternion.identity);
-
-                // Get house dimensions using MeshFilter bounds for more accuracy
-                MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                if (meshFilter != null)
-                {
-                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                    Vector3 houseScale = house.transform.localScale;
-                    houseSize = Vector3.Scale(houseSize, houseScale);
-
-                    // Instantiate the cube underneath the house
-                    Vector3 cubePosition = new Vector3(position.x, terrainHeight - (houseSize.y / 1.5f), position.z);
-                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                    Debug.Log($"Spawning house at y={terrainHeight} and cube at y={terrainHeight - (houseSize.y / 2)} with scale {houseSize}");
-                }
-                else
-                {
-                    Debug.LogError("House prefab does not have a MeshFilter component.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error positioning house at {position}: {ex.Message}");
-            }
-        }
-    }
     void Update()
     {
         if (canclearmap && Input.GetKeyDown(KeyCode.P))
@@ -775,20 +811,22 @@ public class MapGenerator : MonoBehaviour
 
     void RestoreOriginalTerrain()
     {
-        if (terrain == null || originalHeights == null)
+        foreach (var terrain in clusterTerrains.Values)
         {
-            Debug.LogError("Terrain or original heights not assigned.");
-            return;
+            int clusterId = clusterTerrains.First(ct => ct.Value == terrain).Key;
+            float[,] heights = originalHeights[clusterId];
+            terrain.terrainData.SetHeights(0, 0, heights);
         }
-
-        // Restore the terrain to its original state
-        terrain.terrainData.SetHeights(0, 0, originalHeights);
-
-        // Remove the added texture layer
-        TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
-        List<TerrainLayer> newLayersList = new List<TerrainLayer>(terrainLayers);
-        newLayersList.RemoveAt(newLayersList.Count - 1); // Remove the last added layer
-        terrain.terrainData.terrainLayers = newLayersList.ToArray();
-        terrain.transform.position = new Vector3(0, 0, 0);
     }
+}
+
+[System.Serializable]
+public class Biome
+{
+    public string name;
+    public Texture2D terrainTexture;
+    public Vector2 textureOffset;
+    public Vector2 textureTiling;
+    public List<GameObject> treePrefabs;
+    public List<GameObject> rockPrefabs;
 }
