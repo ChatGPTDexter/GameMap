@@ -5,7 +5,7 @@ using UnityEngine.Networking;
 using TMPro;
 using UnityEngine.UI;
 
-public class CharacterAI : MonoBehaviour
+public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 {
     public string topicLabel;
     public string transcript;
@@ -26,6 +26,8 @@ public class CharacterAI : MonoBehaviour
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     private bool interactionEnabled = false;
+    public Vector3 GetPosition() => transform.position;
+
 
     void Start()
     {
