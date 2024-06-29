@@ -8,6 +8,7 @@ using UnityEngine.UI;
 public class CharacterSpawner : MonoBehaviour
 {
     [SerializeField] private GameObject characterPrefab;
+    [SerializeField] private GameObject spawnCharacterPrefab; // Asign the spawnCharacterAI here
     [SerializeField] private GameObject uiCanvasPrefab;
     [SerializeField] public TextAsset coordinatesCsvFile;
     [SerializeField] public TextAsset transcriptsCsvFile;
@@ -22,10 +23,7 @@ public class CharacterSpawner : MonoBehaviour
     }
 
     private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
-    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
-
-    // Public property to access the masteredTopics dictionary
-    public Dictionary<string, bool> MasteredTopics => masteredTopics;
+    private List<SpawnCharacterAI> startSpawnedCharacters = new List<SpawnCharacterAI>();
 
     void Start()
     {
@@ -318,6 +316,62 @@ public class CharacterSpawner : MonoBehaviour
         }
     }
 
+
+    private void AssignUIElementsStart(SpawnCharacterAI sCharacterAI, GameObject uiCanvas)
+    {
+        if (sCharacterAI == null || uiCanvas == null)
+        {
+            Debug.LogError("CharacterAI or uiCanvas is null.");
+            return;
+        }
+
+        uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
+
+        TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
+
+        TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
+                                         .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
+
+        Button submitButton = uiCanvas.GetComponentInChildren<Button>();
+
+        if (inputField != null)
+        {
+            sCharacterAI.userInputField = inputField;
+            // Manually set the position and size of the input field
+            RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
+            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
+            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+            inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
+            inputField.textComponent.fontSize = 20; // Set font size
+            inputField.textComponent.color = Color.black; // Set text color to black
+
+            // Ensure the Return key submits the question
+            inputField.onSubmit.AddListener(delegate { sCharacterAI.OnAskQuestion(); });
+        }
+        else
+        {
+            Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
+        }
+
+        if (responseText != null)
+        {
+            sCharacterAI.responseText = responseText;
+            responseText.fontSize = 24.0f;
+            responseText.color = Color.black;
+            responseText.enableAutoSizing = false;
+            responseText.alignment = TextAlignmentOptions.TopLeft;
+            responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
+            // Adjust the position and size of the response text box
+            RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
+            responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
+            responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
+            // Add a white background
+        }
+        else
+        {
+            Debug.LogWarning("No TMP_Text found in the UI Canvas.");
+        }
+    }
     private string[] SplitCsvLine(string line)
     {
         List<string> values = new List<string>();
@@ -347,14 +401,15 @@ public class CharacterSpawner : MonoBehaviour
         return values.ToArray();
     }
 
-    public CharacterAI GetClosestCharacter(Vector3 position, float radius)
+    public IInteractiveCharacter GetClosestCharacter(Vector3 position, float radius)
     {
-        CharacterAI closestCharacter = null;
+        IInteractiveCharacter closestCharacter = null;
         float closestDistance = radius;
 
+        // Check regular characters
         foreach (var character in spawnedCharacters)
         {
-            float distance = Vector3.Distance(position, character.transform.position);
+            float distance = Vector3.Distance(position, character.GetPosition());
             if (distance < closestDistance)
             {
                 closestDistance = distance;
@@ -362,6 +417,64 @@ public class CharacterSpawner : MonoBehaviour
             }
         }
 
+        // Check start characters
+        foreach (var startCharacter in startSpawnedCharacters)
+        {
+            float distance = Vector3.Distance(position, startCharacter.GetPosition());
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestCharacter = startCharacter;
+            }
+        }
+
         return closestCharacter;
+    }
+
+    public void spawnSpawnCharacter(Vector3 position, int index)
+    {
+        Vector3 houseDimensions = GetHouseDimensions();
+
+        float zOffset = houseDimensions.z + 1f;
+
+        Vector3 adjustedPos = new Vector3(position.x, position.y, position.z + zOffset);
+        GameObject character = Instantiate(spawnCharacterPrefab, adjustedPos, Quaternion.identity);
+        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
+        if (sCharacterAI != null)
+        {
+            if (index == 0)
+            {
+                sCharacterAI.InitializeFirstOne();
+            } else
+            {
+                sCharacterAI.InitializeSecondOne();
+            }
+            startSpawnedCharacters.Add(sCharacterAI);
+        }
+        else
+        {
+            Debug.LogError($"Character does not have a CharacterAI component attached.");
+        }
+
+        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+
+
+
+        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+        canvasComponent.renderMode = RenderMode.WorldSpace;
+
+        // Set the canvas as a child of the character to follow its movements
+        uiCanvas.transform.SetParent(character.transform);
+
+        // Apply a 180-degree rotation to the canvas around the Y-axis
+        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
+        // Set the canvas sorting order (Remove the duplicate declaration)
+        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
+
+        AssignUIElementsStart(sCharacterAI, uiCanvas);
     }
 }
