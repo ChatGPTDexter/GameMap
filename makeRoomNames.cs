@@ -18,11 +18,18 @@ public class HouseNames : MonoBehaviour
     private GameCompletion gameCompletion;
 
     private Dictionary<string, string> nameMappings = new Dictionary<string, string>();
+    private MapGenerator mapGenerator;
+    private CharacterSpawner characterSpawner;
 
+    public List<string> clusterNames = new List<string>();
 
     void Start()
     {
         gameCompletion = FindObjectOfType<GameCompletion>();
+        mapGenerator = FindObjectOfType<MapGenerator>();
+        characterSpawner = FindObjectOfType<CharacterSpawner>();
+
+        StartCoroutine(GenerateClusterNames());
         StartCoroutine(ProcessCSVData());
 
         // Get reference to the main camera
@@ -50,6 +57,108 @@ public class HouseNames : MonoBehaviour
             }
         }
     }
+    private IEnumerator GenerateClusterNames()
+    {
+        if (mapGenerator != null && mapGenerator.clusterLabels != null)
+        {
+            foreach (var cluster in mapGenerator.clusterLabels)
+            {
+                int clusterId = cluster.Key;
+                List<string> labels = cluster.Value;
+
+                // Concatenate all labels for the cluster to form the name
+                string concatenatedLabels = string.Join(", ", labels);
+
+                // Generate cluster name using ChatGPT
+                yield return StartCoroutine(MakeClusterName(clusterId, concatenatedLabels));
+            }
+            Debug.Log("Clusters created successfullly!");
+
+            characterSpawner.spawnSecondCharacter(clusterNames);
+        }
+        else
+        {
+            Debug.LogWarning("MapGenerator or clusterLabels is null.");
+        }
+    }
+
+    private IEnumerator MakeClusterName(int clusterId, string concatenatedLabels)
+    {
+        bool nameGenerated = false;
+        string generatedName = "";
+
+        // Retry loop to generate a name
+        while (!nameGenerated)
+        {
+            yield return StartCoroutine(GetClusterResponseFromAI(concatenatedLabels, (name) =>
+            {
+                if (!string.IsNullOrEmpty(name))
+                {
+                    nameGenerated = true;
+                    generatedName = name;
+                }
+            }));
+        }
+
+        // Once name is generated, log the cluster name
+        if (!string.IsNullOrEmpty(generatedName))
+        {
+            Debug.Log($"Cluster {clusterId} Name: {generatedName}");
+            clusterNames.Add(generatedName); 
+        }
+        else
+        {
+            Debug.LogWarning($"Failed to generate name for cluster with labels: {concatenatedLabels}");
+        }
+    }
+
+    private IEnumerator GetClusterResponseFromAI(string concatenatedLabels, System.Action<string> callback)
+    {
+        var requestData = new OpenAIRequest
+        {
+            model = "gpt-3.5-turbo",
+            messages = new OpenAIMessage[] { new OpenAIMessage { role = "user", content = $"Create a creative, concise, and fun name for a cluster with these node names: {concatenatedLabels}, that is to be in a video game." } },
+            max_tokens = 150,
+            temperature = 0.7f
+        };
+
+        string jsonData = JsonUtility.ToJson(requestData);
+
+        using (UnityWebRequest request = new UnityWebRequest(OpenAIEndpoint, "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Authorization", $"Bearer {OpenAIAPIKey}");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError)
+            {
+                Debug.LogError($"Error: {request.error}\nResponse: {request.downloadHandler.text}");
+                // Handle error here
+                callback?.Invoke("");
+            }
+            else
+            {
+                Debug.Log($"Response: {request.downloadHandler.text}");
+                var jsonResponse = JsonUtility.FromJson<OpenAIResponse>(request.downloadHandler.text);
+                if (jsonResponse.choices != null && jsonResponse.choices.Count > 0)
+                {
+                    var firstChoice = jsonResponse.choices[0];
+                    var messageContent = firstChoice.message.content.Trim();
+                    callback?.Invoke(messageContent);
+                }
+                else
+                {
+                    // Handle no response from AI
+                    callback?.Invoke("");
+                }
+            }
+        }
+    }
+
 
     private IEnumerator ProcessCSVData()
     {
@@ -114,6 +223,7 @@ public class HouseNames : MonoBehaviour
             Debug.LogWarning($"Failed to generate name for transcript: {transcript}");
         }
     }
+
 
     private IEnumerator GetResponseFromAI(string transcript, int rowIndex, System.Action<string> callback)
     {
