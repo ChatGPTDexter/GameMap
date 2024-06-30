@@ -9,7 +9,7 @@ using System.Linq;
 public class MapGenerator : MonoBehaviour
 {
     [SerializeField] private GameObject player; // Assign the player object here
-    
+
     public TextAsset houseCsvFile; // Assign your house CSV file here in the Inspector
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public List<GameObject> housePrefabs; // Assign multiple house prefabs here
@@ -21,7 +21,9 @@ public class MapGenerator : MonoBehaviour
     public GameObject waterPrefab; // Assign the water prefab here
     public float waterHeight = 2f; // Height of the water
     public float checkRadius = 10f; // Radius to check for nearby houses
-    
+    //public List<GameObject> brokenParts; // Assign biomes here
+    //public GameObject fire;
+
     public GameObject cubePrefab; // Assign the cube prefab here
     public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
     public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
@@ -36,6 +38,11 @@ public class MapGenerator : MonoBehaviour
     private float minZ = float.MaxValue, maxZ = float.MinValue;
     public bool canclearmap = true;
     public Dictionary<string, List<Vector3>> housePositionsByLabel = new Dictionary<string, List<Vector3>>();
+    public float spawnRadius = 3.0f;  // Adjust this radius as needed to ensure parts are close but not touching
+    private Dictionary<int, Vector3> terrainStartPoints = new Dictionary<int, Vector3>();
+    private Dictionary<int, Vector2> terrainSizes = new Dictionary<int, Vector2>();
+    public Vector3 spawnPos;
+
 
 
     private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
@@ -91,6 +98,8 @@ public class MapGenerator : MonoBehaviour
         InstantiateHouses(); // Instantiate and position the houses after terrain generation
         SetupMiniMap(); // Setup the mini-map
     }
+
+
     void CalculateTerrainSize()
     {
         StringReader reader = new StringReader(houseCsvFile.text);
@@ -171,83 +180,132 @@ public class MapGenerator : MonoBehaviour
         terrainData.treeInstances = newTreeInstances.ToArray();
     }
 
-     void createSpawnIsland()
-     {
-         TerrainData terrainData = new TerrainData();
-         terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
-         terrainData.size = new Vector3(600, terrain.terrainData.size.y, 600);
-         GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
-         Terrain newTerrain = terrainObject.GetComponent<Terrain>();
-         newTerrain.transform.position = new Vector3((maxX- minX) / 2 + minX - 300, 0, (maxZ - minZ) / 2 + minZ - 300);
-    
-         Vector3 islandCenter = new Vector3((maxX - minX) / 2 + minX, 0, (maxZ - minZ) / 2 + minZ);
-    
-         float islandRadius = 100; // Define the half-length of the side of the square island
-    
-         // Create a random number generator
-         System.Random random = new System.Random();
-    
-         List<Vector3> houseCoordinates = new List<Vector3>();
-    
-         // Generate three random positions within the square island bounds
-         for (int i = 0; i < 2; i++)
-         {
-             // Generate random x and z positions within the square
-             float randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-             float randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-             float randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 15 and 60
-    
-             // Calculate the random position within the square island
-             Vector3 randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
-    
-             // Elevate terrain around the random position
-             ElevateTerrainAround(newTerrain, randomPosition);
-    
-             // Instantiate the house prefab at the adjusted height
-             GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
-             float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
-             GameObject house = Instantiate(housePrefab, new Vector3(randomPosition.x, randomPosition.y + (houseHeight / 2), randomPosition.z), Quaternion.identity);
-    
-             houseCoordinates.Add(randomPosition);
-             characterSpawner.spawnSpawnCharacter(randomPosition, i);
-    
-             if (i == 0)
-             {
-                 player.transform.position = new Vector3(randomPosition.x, randomPosition.y + 4, randomPosition.z + 5);
-             }
-         }
-    
-         Biome islandBiome = biomes[0];
-    
-         // Create and apply the biome's terrain layer
-         TerrainLayer newLayer = new TerrainLayer
-         {
-             diffuseTexture = islandBiome.terrainTexture,
-             tileSize = islandBiome.textureTiling,
-             tileOffset = islandBiome.textureOffset
-         };
-         terrainData.terrainLayers = new TerrainLayer[] { newLayer };
-    
-         // Apply the texture to the entire spawn island terrain
-         ApplyTextureToTerrain(newTerrain, islandCenter, newLayer);
-    
-         int segments = Mathf.CeilToInt(Vector3.Distance(houseCoordinates[0], houseCoordinates[1]) / 1f); // Increase the number of segments
-         Vector3 direction = -(houseCoordinates[0] - houseCoordinates[1]) / segments;
-    
-         for (int i = 0; i < segments; i++)
-         {
-             Vector3 start = houseCoordinates[0] + direction * i;
-             Vector3 end = houseCoordinates[0] + direction * (i + 1);
-    
-             // Adjust the y-coordinate to match the terrain height
-             start.y = newTerrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
-             end.y = newTerrain.SampleHeight(end) + 0.1f;
-    
-             CreateRoadBetween(start, end, newTerrain);
-         }
-    
-         SpawnBiomeObjects(islandBiome, islandCenter);  
-     }
+    void createSpawnIsland()
+    {
+        TerrainData terrainData = new TerrainData();
+        terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
+        terrainData.size = new Vector3(600, terrain.terrainData.size.y, 600);
+        GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
+        Terrain newTerrain = terrainObject.GetComponent<Terrain>();
+        newTerrain.transform.position = new Vector3((maxX - minX) / 2 + minX - 300, 0, (maxZ - minZ) / 2 + minZ - 300);
+
+        Vector3 islandCenter = new Vector3((maxX - minX) / 2 + minX, 0, (maxZ - minZ) / 2 + minZ);
+
+        float islandRadius = 100; // Define the half-length of the side of the square island
+
+        // Create a random number generator
+        System.Random random = new System.Random();
+
+        List<Vector3> houseCoordinates = new List<Vector3>();
+
+        // Generate three random positions within the square island bounds
+        for (int i = 0; i < 2; i++)
+        {
+            // Generate random x and z positions within the square
+            float randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+            float randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+            float randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 15 and 60
+
+            // Calculate the random position within the square island
+            Vector3 randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
+
+            // Elevate terrain around the random position
+            ElevateTerrainAround(newTerrain, randomPosition);
+
+            // Instantiate the house prefab at the adjusted height
+            GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
+            float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
+            GameObject house = Instantiate(housePrefab, new Vector3(randomPosition.x, randomPosition.y + (houseHeight / 2), randomPosition.z), Quaternion.identity);
+
+            houseCoordinates.Add(randomPosition);
+            characterSpawner.spawnSpawnCharacter(randomPosition, i);
+
+            if (i == 0)
+            {
+                spawnPos = new Vector3(randomPosition.x - 20, randomPosition.y + 10, randomPosition.z + 20); 
+                player.transform.position = spawnPos;
+                //Instantiate(fire, new Vector3(randomPosition.x - 20, randomPosition.y, randomPosition.z + 20), Quaternion.identity);
+                //SpawnPartsNearPoint(player.transform.position, newTerrain);
+            }
+        }
+
+        Biome islandBiome = biomes[0];
+
+        // Create and apply the biome's terrain layer
+        TerrainLayer newLayer = new TerrainLayer
+        {
+            diffuseTexture = islandBiome.terrainTexture,
+            tileSize = islandBiome.textureTiling,
+            tileOffset = islandBiome.textureOffset
+        };
+        terrainData.terrainLayers = new TerrainLayer[] { newLayer };
+
+        // Apply the texture to the entire spawn island terrain
+        ApplyTextureToTerrain(newTerrain, islandCenter, newLayer);
+
+        int segments = Mathf.CeilToInt(Vector3.Distance(houseCoordinates[0], houseCoordinates[1]) / 1f); // Increase the number of segments
+        Vector3 direction = -(houseCoordinates[0] - houseCoordinates[1]) / segments;
+
+        for (int i = 0; i < segments; i++)
+        {
+            Vector3 start = houseCoordinates[0] + direction * i;
+            Vector3 end = houseCoordinates[0] + direction * (i + 1);
+
+            // Adjust the y-coordinate to match the terrain height
+            start.y = newTerrain.SampleHeight(start) + 0.1f; // Slightly above the terrain
+            end.y = newTerrain.SampleHeight(end) + 0.1f;
+
+            CreateRoadBetween(start, end, newTerrain);
+        }
+
+        SpawnBiomeObjects(islandBiome, islandCenter);
+    }
+
+    /*
+    void SpawnPartsNearPoint(Vector3 randomPos, Terrain terrain)
+    {
+        foreach (GameObject part in brokenParts)
+        {
+            GameObject spawnedPart = Instantiate(part, GetRandomPositionNearPoint(randomPos, spawnRadius, terrain), Quaternion.identity);
+            AddPhysicsComponents(spawnedPart);
+        }
+    }
+
+    Vector3 GetRandomPositionNearPoint(Vector3 point, float radius, Terrain terrain)
+    {   
+        Vector2 randomCircle = UnityEngine.Random.insideUnitCircle * radius;
+        float actualHeight = terrain.SampleHeight(new Vector3(point.x + randomCircle.x, 0, point.z + randomCircle.y));
+        return new Vector3(point.x + randomCircle.x, actualHeight, point.z + randomCircle.y);
+    }
+
+    bool IsTooCloseToOtherParts(Vector3 position, List<Vector3> otherPositions, float minDistance)
+    {
+        foreach (Vector3 otherPosition in otherPositions)
+        {
+            if (Vector3.Distance(position, otherPosition) < minDistance)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void AddPhysicsComponents(GameObject obj)
+    {
+        // Add a Rigidbody if it doesn't already have one
+        if (obj.GetComponent<Rigidbody>() == null)
+        {
+            obj.AddComponent<Rigidbody>();
+        }
+
+        // Ensure the object has at least one collider
+        if (obj.GetComponent<Collider>() == null)
+        {
+            // Add a default BoxCollider if no collider is present
+            obj.AddComponent<BoxCollider>();
+        }
+    }
+    */
     void PlaceWater()
     {
         if (waterPrefab == null)
@@ -318,7 +376,7 @@ public class MapGenerator : MonoBehaviour
                 continue;
             }
 
-            string label = fields[4].Trim('"'); // Trim quotes from the label
+            string label = fields[4].Trim().Trim('"'); // Trim quotes from the label
             if (float.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
                 float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float z) &&
                 float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
@@ -547,7 +605,7 @@ public class MapGenerator : MonoBehaviour
         terrainData.SetAlphamaps(startX, startZ, alphamaps);
     }
 
-    
+
     void GenerateMainRoadFromMST()
     {
         Debug.Log("GenerateMainRoadFromMST");
@@ -886,23 +944,36 @@ public class MapGenerator : MonoBehaviour
         miniMapController.SetupMiniMap();
     }
 
-    void Update()
+    public void TeleportTo(int clusterID)
     {
-        if (canclearmap && Input.GetKeyDown(KeyCode.P))
+        // Check if the clusterID exists in your dictionary
+        if (clusterTerrains.ContainsKey(clusterID))
         {
-            RestoreOriginalTerrain();
+            Terrain terrain = clusterTerrains[clusterID];
+
+            // Get terrain size
+            Vector3 terrainSize = terrain.terrainData.size;
+
+            // Calculate random position within the terrain bounds
+            float randomX = UnityEngine.Random.Range(terrain.transform.position.x, terrain.transform.position.x + terrainSize.x);
+            float randomZ = UnityEngine.Random.Range(terrain.transform.position.z, terrain.transform.position.z + terrainSize.z);
+            float yPosition = terrain.SampleHeight(new Vector3(randomX, 0, randomZ)) + terrain.transform.position.y; // Adjust y to terrain height
+
+            // Set the teleport position
+            Vector3 teleportPosition = new Vector3(randomX, yPosition + 30, randomZ);
+
+            // Teleport the GameObject to the calculated position
+            player.transform.position = teleportPosition;
+
+            Debug.Log($"Teleported to {teleportPosition}");
+        }
+        else
+        {
+            Debug.LogError($"ClusterID {clusterID} not found in clusterTerrains dictionary.");
         }
     }
 
-    void RestoreOriginalTerrain()
-    {
-        foreach (var terrain in clusterTerrains.Values)
-        {
-            int clusterId = clusterTerrains.First(ct => ct.Value == terrain).Key;
-            float[,] heights = originalHeights[clusterId];
-            terrain.terrainData.SetHeights(0, 0, heights);
-        }
-    }
+
 }
 
 [System.Serializable]
