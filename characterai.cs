@@ -21,6 +21,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     private MiniMapController miniMapController;
     private CharacterSpawner characterSpawner;
     private GameCompletion gameCompletion;
+    private TeleportBehavior teleportBehavior;
 
     // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
@@ -37,6 +38,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         miniMapController = FindObjectOfType<MiniMapController>();  // Assuming MiniMapController script handles mini-map functionality
         characterSpawner = FindObjectOfType<CharacterSpawner>();  // Ensure characterSpawner is initialized
         gameCompletion = FindObjectOfType<GameCompletion>();
+        teleportBehavior = FindObjectOfType<TeleportBehavior>();
 
         // Listen for the Return key to submit the question
         userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
@@ -65,10 +67,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         userInputField.Select();
         userInputField.ActivateInputField();
 
-        if (mapGenerator != null)
-        {
-            mapGenerator.canclearmap = false;
-        }
 
         if (miniMapController != null)
         {
@@ -80,6 +78,11 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         {
             jump.canJump = false;
         }
+
+        if (teleportBehavior != null)
+        {
+            teleportBehavior.canTeleport = false;
+        }
     }
 
     public void DisableInteraction()
@@ -87,20 +90,21 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         interactionEnabled = false;
         userInputField.gameObject.SetActive(false);
 
-        if (mapGenerator != null)
-        {
-            mapGenerator.canclearmap = true;
-        }
 
         if (miniMapController != null)
         {
             miniMapController.canMiniMap = true;
         }
 
-        // Enable jumping
         if (jump != null)
         {
             jump.canJump = true;
+        }
+
+        // Enable jumping
+        if (teleportBehavior != null)
+        {
+            teleportBehavior.canTeleport = true;
         }
     }
 
