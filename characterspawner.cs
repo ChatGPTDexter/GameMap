@@ -25,6 +25,7 @@ public class CharacterSpawner : MonoBehaviour
     private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
 
     public Dictionary<string, bool> MasteredTopics => masteredTopics;
+    public Vector3 secondCord;
 
     void Start()
     {
@@ -61,7 +62,7 @@ public class CharacterSpawner : MonoBehaviour
 
         foreach (var coordinate in coordinates)
         {
-            string trimmedLabel = coordinate.Label.Trim();
+            string trimmedLabel = coordinate.Label.Trim().Trim('"');
 
             if (transcripts.TryGetValue(trimmedLabel, out string transcript))
             {
@@ -103,7 +104,7 @@ public class CharacterSpawner : MonoBehaviour
                 {
                     if (float.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float normalizedTranscriptLength))
                     {
-                        string label = values[4].Trim('"');
+                        string label = values[4].Trim().Trim('"');
                         coordinates.Add((label, normalizedTranscriptLength));
                         Debug.Log($"Parsed coordinate: {label} with normalized transcript length: {normalizedTranscriptLength}");
                     }
@@ -431,26 +432,57 @@ public class CharacterSpawner : MonoBehaviour
         Vector3 houseDimensions = GetHouseDimensions();
 
         float zOffset = houseDimensions.z + 1f;
-
         Vector3 adjustedPos = new Vector3(position.x, position.y, position.z + zOffset);
+
         GameObject character = Instantiate(spawnCharacterPrefab, adjustedPos, Quaternion.identity);
         var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
+
         if (sCharacterAI != null)
         {
             if (index == 0)
             {
                 sCharacterAI.InitializeFirstOne();
+                startSpawnedCharacters.Add(sCharacterAI);
             }
-            else
+            if (index == 1)
             {
-                sCharacterAI.InitializeSecondOne();
+                Destroy(character.gameObject); // Destroy the GameObject associated with the character AI
+                secondCord = adjustedPos;
             }
-            startSpawnedCharacters.Add(sCharacterAI);
         }
         else
         {
             Debug.LogError($"Character does not have a CharacterAI component attached.");
         }
+
+        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+
+        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+        canvasComponent.renderMode = RenderMode.WorldSpace;
+
+        // Set the canvas as a child of the character to follow its movements
+        uiCanvas.transform.SetParent(character.transform);
+
+        // Apply a 180-degree rotation to the canvas around the Y-axis
+        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
+        // Set the canvas sorting order (Remove the duplicate declaration)
+        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
+
+        AssignUIElementsStart(sCharacterAI, uiCanvas);
+    }
+
+    public void spawnSecondCharacter(List<string> clusterNames)
+    {
+        Debug.Log("Spawning second chracter.");
+        GameObject character = Instantiate(spawnCharacterPrefab, secondCord, Quaternion.identity);
+        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
+        sCharacterAI.InitializeSecondOne(clusterNames);
+
+        startSpawnedCharacters.Add(sCharacterAI);
 
         Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
         GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
