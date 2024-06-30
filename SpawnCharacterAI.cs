@@ -1,4 +1,4 @@
-using System.Collections;
+    using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -19,11 +19,13 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
     private CharacterSpawner characterSpawner;
     private GameCompletion gameCompletion;
 
-    // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     private bool interactionEnabled = false;
     public Vector3 GetPosition() => transform.position;
+    private List<string> clusterNamesHere;
+    private bool clusterNamesInitialized = false;
+    private TeleportBehavior teleportBehavior;
 
     void Start()
     {
@@ -33,6 +35,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         miniMapController = FindObjectOfType<MiniMapController>();  // Assuming MiniMapController script handles mini-map functionality
         characterSpawner = FindObjectOfType<CharacterSpawner>();  // Ensure characterSpawner is initialized
         gameCompletion = FindObjectOfType<GameCompletion>();
+        teleportBehavior = FindObjectOfType<TeleportBehavior>();
 
         // Listen for the Return key to submit the question
         userInputField.onSubmit.AddListener(delegate 
@@ -51,17 +54,21 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are the first npc that the character interacts with in this game. Tell him about how he needs to follow the road to escape, and make it ominous. DON'T TELL THE PERSON ANYTHING ELSE!"
+            content = $"You are the first npc that the character interacts with in this game after they crash from a shaceship. Tell him about how he needs to follow the road to escape, and make it ominous. DON'T TELL THE PERSON ANYTHING ELSE!"
         });
     }
 
-    public void InitializeSecondOne()
+    public void InitializeSecondOne(List<string> clusterNames)
     {
+        clusterNamesInitialized = true;
+        clusterNamesHere = clusterNames;
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are the second npc that the character interacts with in this game. Say to him that to escape from this world they need collect the scattered rocket ship parts, one from each region in this world. Tell him to chose the region they would like to start in. DON'T PROVIDE MORE INFORMATION!    "
+            content = $"You are the second npc that the character interacts with in this game. Say to him that to escape from this world they need collect the scattered rocket ship parts, one from each region in this world. Tell him to chose the region they would like to start in between {clusterNames[0]}, {clusterNames[1]}, {clusterNames[2]},{clusterNames[3]}, and {clusterNames[4]}. DON'T PROVIDE MORE INFORMATION!"
         });
+
+
     }
 
     public void EnableInteraction()
@@ -70,11 +77,6 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         userInputField.gameObject.SetActive(true);
         userInputField.Select();
         userInputField.ActivateInputField();
-
-        if (mapGenerator != null)
-        {
-            mapGenerator.canclearmap = false;
-        }
 
         if (miniMapController != null)
         {
@@ -86,17 +88,17 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         {
             jump.canJump = false;
         }
+
+        if (teleportBehavior != null)
+        {
+            teleportBehavior.canTeleport = false;
+        }
     }
 
     public void DisableInteraction()
     {
         interactionEnabled = false;
         userInputField.gameObject.SetActive(false);
-
-        if (mapGenerator != null)
-        {
-            mapGenerator.canclearmap = true;
-        }
 
         if (miniMapController != null)
         {
@@ -108,6 +110,12 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         {
             jump.canJump = true;
         }
+
+        if (teleportBehavior != null)
+        {
+            teleportBehavior.canTeleport = true;
+        }
+
     }
 
     public void OnAskQuestion()
@@ -119,7 +127,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
             chatHistory.Add(new OpenAIMessage { role = "user", content = userQuestion });
 
             string prompt = GetChatHistoryAsString();
-            StartCoroutine(GetResponseFromAI(prompt));
+            StartCoroutine(GetResponseFromAI(prompt, userQuestion));
 
             // Clear the input field after submission
             userInputField.text = string.Empty;
@@ -137,7 +145,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         return sb.ToString();
     }
 
-    private IEnumerator GetResponseFromAI(string prompt)
+    private IEnumerator GetResponseFromAI(string prompt, string question)
     {
         var requestData = new OpenAIRequest
         {
@@ -179,10 +187,18 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
                     responseText.text = messageContent;
 
                     Debug.Log($"Setting response text to: {messageContent}");
-
-                    // Debugging: Log the message content
-                    Debug.Log($"Message Content: {messageContent}");
-                    Debug.Log($"Trimmed and Lowercase Message Content: {messageContent.ToLower().Trim()}");
+                    int index = 0;
+                    if (clusterNamesInitialized)
+                    {
+                        foreach (var clusterName in clusterNamesHere)
+                        {
+                            if (question.ToLower().Trim('"').Trim().Contains(clusterName.ToLower().Trim()))
+                            {
+                                mapGenerator.TeleportTo(index);
+                            }
+                            index++;
+                        }
+                    }
                 }
                 else
                 {
