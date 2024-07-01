@@ -1,9 +1,10 @@
+using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using UnityEngine;
 using TMPro;
-using UnityEngine.UI;
+using System.Collections;
 
 public class CharacterSpawner : MonoBehaviour
 {
@@ -22,9 +23,6 @@ public class CharacterSpawner : MonoBehaviour
 
     private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
     private List<SpawnCharacterAI> startSpawnedCharacters = new List<SpawnCharacterAI>();
-    private Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
-
-    public Dictionary<string, bool> MasteredTopics => masteredTopics;
     public Vector3 secondCord;
 
     void Start()
@@ -171,14 +169,21 @@ public class CharacterSpawner : MonoBehaviour
                 continue;
             }
 
+            if (!mapGenerator.houseRotationsByLabel.TryGetValue(topic.Label, out List<Quaternion> houseRotations))
+            {
+                Debug.LogWarning($"No house rotations found for label: {topic.Label}");
+                continue;
+            }
+
             for (int i = 0; i < housePositions.Count; i++)
             {
                 Vector3 housePosition = housePositions[i];
-                Vector3 adjustedPosition = housePosition + new Vector3(0, 0, 5f); // Adjusted position in front of the house
+                Quaternion houseRotation = houseRotations[i];
 
-                Debug.Log($"Spawning character for topic: {topic.Label} at adjusted position: {adjustedPosition}");
+                GameObject character = Instantiate(characterPrefab, housePosition, houseRotation);
 
-                GameObject character = Instantiate(characterPrefab, adjustedPosition, Quaternion.identity);
+                // Start the coroutine to move the character
+                StartCoroutine(MoveCharacter(character, 5f));
 
                 var characterAI = character.GetComponent<CharacterAI>();
                 if (characterAI != null)
@@ -196,7 +201,7 @@ public class CharacterSpawner : MonoBehaviour
                 character.name = $"{topic.Label} - Part {i + 1}";
 
                 // Position the UI Canvas slightly in front of the character
-                Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+                Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0);
                 GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
 
                 Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
@@ -210,7 +215,7 @@ public class CharacterSpawner : MonoBehaviour
 
                 uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
 
-                // Set the canvas sorting order (Remove the duplicate declaration)
+                // Set the canvas sorting order
                 canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
 
                 AssignUIElements(characterAI, uiCanvas);
@@ -218,6 +223,152 @@ public class CharacterSpawner : MonoBehaviour
         }
     }
 
+    public void spawnSpawnCharacter(Vector3 position, int index)
+    {
+        GameObject character = Instantiate(spawnCharacterPrefab, position, Quaternion.identity);
+
+        // Rotate character to face the same direction as the house
+        Vector3 nearestPointOnMainRoad = mapGenerator.GetNearestPointOnMainRoad(position);
+        Vector3 directionToMainRoad = (nearestPointOnMainRoad - position).normalized;
+        character.transform.rotation = Quaternion.LookRotation(directionToMainRoad, Vector3.up); // Ensure character is right side up
+
+        // Calculate the forward vector with zero y-component
+        Vector3 forward = new Vector3(character.transform.forward.x, 0, character.transform.forward.z).normalized;
+
+        // Calculate the new position 5 units forward
+        Vector3 newPosition = character.transform.position + forward * 5f;
+        newPosition.y = position.y; // Ensure the y-coordinate remains the same
+        character.transform.position = newPosition;
+
+        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
+
+        if (sCharacterAI != null)
+        {
+            if (index == 0)
+            {
+                sCharacterAI.InitializeFirstOne();
+                startSpawnedCharacters.Add(sCharacterAI);
+            }
+            else if (index == 1)
+            {
+                Destroy(character.gameObject); // Destroy the GameObject associated with the character AI
+                secondCord = newPosition;
+            }
+        }
+        else
+        {
+            Debug.LogError($"Character does not have a SpawnCharacterAI component attached.");
+        }
+
+        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+
+        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+        canvasComponent.renderMode = RenderMode.WorldSpace;
+
+        // Set the canvas as a child of the character to follow its movements
+        uiCanvas.transform.SetParent(character.transform);
+
+        // Apply a 180-degree rotation to the canvas around the Y-axis
+        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
+        // Set the canvas sorting order (Remove the duplicate declaration)
+        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
+
+        AssignUIElementsStart(sCharacterAI, uiCanvas);
+    }
+
+    public void spawnSecondCharacter(List<string> clusterNames)
+    {
+        Debug.Log("Spawning second character.");
+        GameObject character = Instantiate(spawnCharacterPrefab, secondCord, Quaternion.identity);
+
+        // Rotate character to face the same direction as the house
+        Vector3 nearestPointOnMainRoad = mapGenerator.GetNearestPointOnMainRoad(secondCord);
+        Vector3 directionToMainRoad = (nearestPointOnMainRoad - secondCord).normalized;
+        character.transform.rotation = Quaternion.LookRotation(directionToMainRoad, Vector3.up); // Ensure character is right side up
+
+        // Calculate the forward vector with zero y-component
+        Vector3 forward = new Vector3(character.transform.forward.x, 0, character.transform.forward.z).normalized;
+
+        // Calculate the new position 5 units forward
+        Vector3 newPosition = character.transform.position + forward * 5f;
+        newPosition.y = secondCord.y; // Ensure the y-coordinate remains the same
+        character.transform.position = newPosition;
+
+        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
+        sCharacterAI.InitializeSecondOne(clusterNames);
+
+        startSpawnedCharacters.Add(sCharacterAI);
+
+        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+
+        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+        canvasComponent.renderMode = RenderMode.WorldSpace;
+
+        // Set the canvas as a child of the character to follow its movements
+        uiCanvas.transform.SetParent(character.transform);
+
+        // Apply a 180-degree rotation to the canvas around the Y-axis
+        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
+        // Set the canvas sorting order (Remove the duplicate declaration)
+        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
+
+        AssignUIElementsStart(sCharacterAI, uiCanvas);
+    }
+
+    public IInteractiveCharacter GetClosestCharacter(Vector3 position, float radius)
+    {
+        IInteractiveCharacter closestCharacter = null;
+        float closestDistance = radius;
+
+        // Check regular characters
+        foreach (var character in spawnedCharacters)
+        {
+            float distance = Vector3.Distance(position, character.GetPosition());
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestCharacter = character;
+            }
+        }
+
+        // Check start characters
+        foreach (var startCharacter in startSpawnedCharacters)
+        {
+            float distance = Vector3.Distance(position, startCharacter.GetPosition());
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestCharacter = startCharacter;
+            }
+        }
+
+        return closestCharacter;
+    }
+    private IEnumerator MoveCharacter(GameObject character, float distance)
+    {
+        Vector3 startPosition = character.transform.position;
+        Vector3 endPosition = startPosition + character.transform.forward * distance;
+        float elapsedTime = 0f;
+        float moveTime = 1.5f; // Time to move in seconds
+
+        while (elapsedTime < moveTime)
+        {
+            character.transform.position = Vector3.Lerp(startPosition, endPosition, elapsedTime / moveTime);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        character.transform.position = endPosition;
+        Debug.Log("Character moved to: " + character.transform.position);
+    }
     private string GetTranscriptSegment(string transcript, int totalSegments, int segmentIndex)
     {
         if (totalSegments <= 1)
@@ -281,7 +432,6 @@ public class CharacterSpawner : MonoBehaviour
             RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
             responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
             responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
-            // Add a white background
         }
         else
         {
@@ -293,7 +443,7 @@ public class CharacterSpawner : MonoBehaviour
     {
         if (sCharacterAI == null || uiCanvas == null)
         {
-            Debug.LogError("CharacterAI or uiCanvas is null.");
+            Debug.LogError("SpawnCharacterAI or uiCanvas is null.");
             return;
         }
 
@@ -337,35 +487,11 @@ public class CharacterSpawner : MonoBehaviour
             RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
             responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
             responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
-            // Add a white background
         }
         else
         {
             Debug.LogWarning("No TMP_Text found in the UI Canvas.");
         }
-    }
-
-    private Vector3 GetHouseDimensions()
-    {
-        if (mapGenerator.housePrefabs.Count == 0)
-        {
-            Debug.LogError("No house prefabs assigned in MapGenerator.");
-            return Vector3.zero;
-        }
-
-        GameObject housePrefab = mapGenerator.housePrefabs[0];
-        MeshFilter meshFilter = housePrefab.GetComponentInChildren<MeshFilter>();
-        if (meshFilter == null)
-        {
-            Debug.LogError($"House prefab '{housePrefab.name}' does not have a MeshFilter component.");
-            return Vector3.zero;
-        }
-
-        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-        Vector3 houseScale = housePrefab.transform.localScale;
-        houseSize = Vector3.Scale(houseSize, houseScale);
-
-        return houseSize;
     }
 
     private string[] SplitCsvLine(string line)
@@ -395,112 +521,5 @@ public class CharacterSpawner : MonoBehaviour
         values.Add(value);
 
         return values.ToArray();
-    }
-
-    public IInteractiveCharacter GetClosestCharacter(Vector3 position, float radius)
-    {
-        IInteractiveCharacter closestCharacter = null;
-        float closestDistance = radius;
-
-        // Check regular characters
-        foreach (var character in spawnedCharacters)
-        {
-            float distance = Vector3.Distance(position, character.GetPosition());
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestCharacter = character;
-            }
-        }
-
-        // Check start characters
-        foreach (var startCharacter in startSpawnedCharacters)
-        {
-            float distance = Vector3.Distance(position, startCharacter.GetPosition());
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestCharacter = startCharacter;
-            }
-        }
-
-        return closestCharacter;
-    }
-
-    public void spawnSpawnCharacter(Vector3 position, int index)
-    {
-        Vector3 houseDimensions = GetHouseDimensions();
-
-        float zOffset = houseDimensions.z + 1f;
-        Vector3 adjustedPos = new Vector3(position.x, position.y, position.z + zOffset);
-
-        GameObject character = Instantiate(spawnCharacterPrefab, adjustedPos, Quaternion.identity);
-        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
-
-        if (sCharacterAI != null)
-        {
-            if (index == 0)
-            {
-                sCharacterAI.InitializeFirstOne();
-                startSpawnedCharacters.Add(sCharacterAI);
-            }
-            if (index == 1)
-            {
-                Destroy(character.gameObject); // Destroy the GameObject associated with the character AI
-                secondCord = adjustedPos;
-            }
-        }
-        else
-        {
-            Debug.LogError($"Character does not have a CharacterAI component attached.");
-        }
-
-        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
-        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
-
-        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
-        canvasComponent.renderMode = RenderMode.WorldSpace;
-
-        // Set the canvas as a child of the character to follow its movements
-        uiCanvas.transform.SetParent(character.transform);
-
-        // Apply a 180-degree rotation to the canvas around the Y-axis
-        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
-
-        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-
-        // Set the canvas sorting order (Remove the duplicate declaration)
-        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
-
-        AssignUIElementsStart(sCharacterAI, uiCanvas);
-    }
-
-    public void spawnSecondCharacter(List<string> clusterNames)
-    {
-        Debug.Log("Spawning second chracter.");
-        GameObject character = Instantiate(spawnCharacterPrefab, secondCord, Quaternion.identity);
-        var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
-        sCharacterAI.InitializeSecondOne(clusterNames);
-
-        startSpawnedCharacters.Add(sCharacterAI);
-
-        Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
-        GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
-
-        Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
-        canvasComponent.renderMode = RenderMode.WorldSpace;
-
-        // Set the canvas as a child of the character to follow its movements
-        uiCanvas.transform.SetParent(character.transform);
-
-        // Apply a 180-degree rotation to the canvas around the Y-axis
-        uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
-
-        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-
-        // Set the canvas sorting order (Remove the duplicate declaration)
-        canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
-
-        AssignUIElementsStart(sCharacterAI, uiCanvas);
     }
 }
