@@ -23,7 +23,7 @@ public class MapGenerator : MonoBehaviour
     public float checkRadius = 10f; // Radius to check for nearby houses
     //public List<GameObject> brokenParts; // Assign biomes here
     //public GameObject fire;
-
+    public Dictionary<string, List<Quaternion>> houseRotationsByLabel = new Dictionary<string, List<Quaternion>>();
     public GameObject cubePrefab; // Assign the cube prefab here
     public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
     public MiniMapController miniMapController; // Assign the MiniMapController here in the Inspector
@@ -682,6 +682,7 @@ public class MapGenerator : MonoBehaviour
             float houseSpacingZ = length / (numberOfHouses / housesPerRow);
 
             housePositionsByLabel[label] = new List<Vector3>();
+            houseRotationsByLabel[label] = new List<Quaternion>();
 
             // Adjust the layout for specific cases
             if (numberOfHouses == 3)
@@ -718,28 +719,8 @@ public class MapGenerator : MonoBehaviour
                     // Rotate house to face the main road
                     RotateHouseToFaceMainRoad(house, housePosition);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
-
-                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
-                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
-
                     housePositionsByLabel[label].Add(housePosition);
+                    houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
                 }
             }
             else if (numberOfHouses == 5)
@@ -775,28 +756,8 @@ public class MapGenerator : MonoBehaviour
                     // Rotate house to face the main road
                     RotateHouseToFaceMainRoad(house, housePosition);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
-
-                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
-                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
-
                     housePositionsByLabel[label].Add(housePosition);
+                    houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
                 }
             }
             else
@@ -828,32 +789,14 @@ public class MapGenerator : MonoBehaviour
                     // Rotate house to face the main road
                     RotateHouseToFaceMainRoad(house, housePosition);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
-
-                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
-                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
-
                     housePositionsByLabel[label].Add(housePosition);
+                    houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
                 }
             }
         }
     }
+
+
 
     bool IsOnMainRoad(Vector3 position)
     {
