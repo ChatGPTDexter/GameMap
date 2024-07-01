@@ -180,7 +180,10 @@ public class CharacterSpawner : MonoBehaviour
                 Vector3 housePosition = housePositions[i];
                 Quaternion houseRotation = houseRotations[i];
 
-                GameObject character = Instantiate(characterPrefab, housePosition, houseRotation);
+                // Add 1f to the y-coordinate of the character's position
+                Vector3 characterPosition = new Vector3(housePosition.x, housePosition.y + 1f, housePosition.z);
+
+                GameObject character = Instantiate(characterPrefab, characterPosition, houseRotation);
 
                 // Start the coroutine to move the character
                 StartCoroutine(MoveCharacter(character, 5f));
@@ -357,7 +360,7 @@ public class CharacterSpawner : MonoBehaviour
         Vector3 startPosition = character.transform.position;
         Vector3 endPosition = startPosition + character.transform.forward * distance;
         float elapsedTime = 0f;
-        float moveTime = 1.5f; // Time to move in seconds
+        float moveTime = 2f; // Time to move in seconds
 
         while (elapsedTime < moveTime)
         {
