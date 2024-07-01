@@ -86,6 +86,8 @@ public class MapGenerator : MonoBehaviour
         ApplyBiomeTextures();
         SpawnTreesAndRocks();
         RemoveTreesBelowHeight(3f);
+        
+        AdjustTerrainAroundHouses(); // Adjust terrain around houses to ensure they are above water
         PlaceWater(); // Add water layer
 
         GenerateMainRoadFromMST(); // Ensure road positions are populated
@@ -98,7 +100,6 @@ public class MapGenerator : MonoBehaviour
         InstantiateHouses(); // Instantiate and position the houses after terrain generation
         SetupMiniMap(); // Setup the mini-map
     }
-
 
     void CalculateTerrainSize()
     {
@@ -306,6 +307,50 @@ public class MapGenerator : MonoBehaviour
         }
     }
     */
+    void AdjustTerrainAroundHouses()
+    {
+        float adjustmentRadius = 50f; // Adjust this radius as needed
+        float minHeightAboveWater = waterHeight + 0.1f; // Ensure terrain is slightly above water
+
+        foreach (var housePosition in housePositions.Values)
+        {
+            // Calculate the terrain height to ensure it's above water
+            int xResolution = terrain.terrainData.heightmapResolution;
+            int zResolution = terrain.terrainData.heightmapResolution;
+            Vector3 terrainPos = terrain.transform.position;
+
+            // Convert house position to terrain coordinates
+            float relativeX = (housePosition.x - terrainPos.x) / terrain.terrainData.size.x * xResolution;
+            float relativeZ = (housePosition.z - terrainPos.z) / terrain.terrainData.size.z * zResolution;
+
+            int radius = Mathf.CeilToInt(adjustmentRadius * xResolution / terrain.terrainData.size.x);
+
+            int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radius, 0, xResolution - 1);
+            int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
+            int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
+            int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
+
+            float[,] heights = terrain.terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
+
+            for (int x = 0; x < heights.GetLength(0); x++)
+            {
+                for (int z = 0; z < heights.GetLength(1); z++)
+                {
+                    float distance = Vector2.Distance(new Vector2(x, z), new Vector2(relativeX - startX, relativeZ - startZ));
+                    if (distance < radius)
+                    {
+                        // Raise the terrain to be above the water height
+                        heights[x, z] = Mathf.Max(minHeightAboveWater / terrain.terrainData.size.y, heights[x, z]);
+                    }
+                }
+            }
+
+            terrain.terrainData.SetHeights(startX, startZ, heights);
+        }
+
+        Debug.Log("Terrain adjusted around house positions to be above water level.");
+    }
+
     void PlaceWater()
     {
         if (waterPrefab == null)
@@ -330,7 +375,7 @@ public class MapGenerator : MonoBehaviour
         // Scale the water to match the terrain size
         water.transform.localScale = new Vector3(terrainSize.x, 1, terrainSize.z);
 
-        // Position the water at the center of the terrain with a height of 2
+        // Position the water at the center of the terrain with the desired height
         water.transform.position = new Vector3(
             terrainPosition.x + terrainSize.x / 2,
             waterHeight,
@@ -339,6 +384,7 @@ public class MapGenerator : MonoBehaviour
 
         Debug.Log("Water placed at height 2, size of terrain, and shape of square.");
     }
+
 
     void GenerateMapFromCSV()
     {
@@ -659,6 +705,18 @@ public class MapGenerator : MonoBehaviour
             }
         }
     }
+    bool IsWithinHouseRadius(Vector3 position, float radius)
+    {
+        foreach (var housePosition in housePositions.Values)
+        {
+            if (Vector3.Distance(position, housePosition) < radius)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void InstantiateHouses()
     {
         foreach (var houseEntry in housePositions)
@@ -721,6 +779,9 @@ public class MapGenerator : MonoBehaviour
 
                     housePositionsByLabel[label].Add(housePosition);
                     houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
+
+                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
+                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
                 }
             }
             else if (numberOfHouses == 5)
@@ -758,6 +819,9 @@ public class MapGenerator : MonoBehaviour
 
                     housePositionsByLabel[label].Add(housePosition);
                     houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
+
+                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
+                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
                 }
             }
             else
@@ -791,13 +855,13 @@ public class MapGenerator : MonoBehaviour
 
                     housePositionsByLabel[label].Add(housePosition);
                     houseRotationsByLabel[label].Add(house.transform.rotation); // Store house rotation
+
+                    Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
+                    GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
                 }
             }
         }
     }
-
-
-
     bool IsOnMainRoad(Vector3 position)
     {
         foreach (Vector3 roadPosition in roadPositions)
