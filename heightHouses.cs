@@ -938,19 +938,18 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-
     void CreateRoadBetween(Vector3 position1, Vector3 position2, Terrain terrain)
     {
         Debug.Log($"Creating road between {position1} and {position2}");
 
         Vector3 midPoint = (position1 + position2) / 2;
         float roadLength = Vector3.Distance(position1, position2);
-        float roadWidth = 0.5f; // Adjust road width to smaller size
+        float roadWidth = 0.2f; // Adjust road width to smaller size
         float minHeightAboveWater = waterHeight + 0.1f; // Minimum height of the road above the water
 
         GameObject road = Instantiate(roadPrefab, midPoint, Quaternion.identity);
 
-        road.transform.localScale = new Vector3(roadWidth, 1.0f, roadLength);
+        road.transform.localScale = new Vector3(roadWidth, 0.1f, roadLength);
         road.transform.LookAt(position2);
         road.transform.Rotate(270, 0, 0); // Rotate the road to be horizontal and properly aligned
 
@@ -971,6 +970,7 @@ public class MapGenerator : MonoBehaviour
             road.GetComponent<Renderer>().material = roadMaterial;
         }
     }
+
     void GenerateMainRoad(Vector3 position1, Vector3 position2)
     {
         Debug.Log($"Generating main road segment between {position1} and {position2}");
