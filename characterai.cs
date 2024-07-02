@@ -9,11 +9,11 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 {
     public string topicLabel;
     public string transcript;
+    public string URL;  // Renamed from URL to videoURL
     public TMP_InputField userInputField;
     public TMP_Text responseText;
 
-
-    private const string OpenAIAPIKey = "api-key";
+    private const string OpenAIAPIKey = "apikey";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
     private FirstPersonMovement firstPersonMovement;
     private MapGenerator mapGenerator;
@@ -27,8 +27,11 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     private bool interactionEnabled = false;
-    public Vector3 GetPosition() => transform.position;
 
+    private int playerPoints = 0;
+    private bool videoWatched = false;
+
+    public Vector3 GetPosition() => transform.position;
 
     void Start()
     {
@@ -47,16 +50,17 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         DisableInteraction();
     }
 
-    public void Initialize(string label, string script)
+    public void Initialize(string label, string script, string URL)
     {
         topicLabel = label;
         transcript = script;
+        this.URL = URL;
 
         // Initialize chat history with system message
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, present the user with a very challenging riddle related to the transcript. Once the the responder answers the riddle sufficiently say 'Correct! You are on your way to mastering Chemistry!'"
+            content = $"You are an expert on the topic: {topicLabel}. Use the following segment of a transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, present the user with a choice between a very challenging riddle, multiple choice questions, and the link to the video related to the segment of transcript. Once the player chooses, prompt them with either the: {URL} if they say video (making sure to direct them to the correct time frame based on your segment of: {transcript}, if they want the riddle, prompt them with a very challenging riddle, and if they want MCQ's give them one question at a time. A player can choose to switch between the choices at any given time. For each correct MCQ the player will earn 10 points, for answering the riddle the player will earn 70 points, for watching the video the player will earn 10 points but they can only gain this 10 points once. Store the number of points and when the player reaches 70 points tell them that they have completed the house and congratulate them."
         });
     }
 
@@ -66,7 +70,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         userInputField.gameObject.SetActive(true);
         userInputField.Select();
         userInputField.ActivateInputField();
-
 
         if (miniMapController != null)
         {
@@ -90,7 +93,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         interactionEnabled = false;
         userInputField.gameObject.SetActive(false);
 
-
         if (miniMapController != null)
         {
             miniMapController.canMiniMap = true;
@@ -101,7 +103,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             jump.canJump = true;
         }
 
-        // Enable jumping
         if (teleportBehavior != null)
         {
             teleportBehavior.canTeleport = true;
@@ -177,20 +178,12 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                     responseText.text = messageContent;
                     Debug.Log($"Setting response text to: {messageContent}");
 
+                    // Process the AI response for points and completion
+                    ProcessAIResponse(messageContent);
+
                     // Debugging: Log the message content
                     Debug.Log($"Message Content: {messageContent}");
                     Debug.Log($"Trimmed and Lowercase Message Content: {messageContent.ToLower().Trim()}");
-
-                    if (messageContent.ToLower().Trim().Contains("correct! you are on your way to mastering chemistry!".ToLower().Trim()))
-                    {
-                        Debug.Log($"Masted {topicLabel}");
-                        if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel)) // Access through characterSpawner instance
-                        {
-                            Debug.Log($"Mastered {topicLabel}");
-                            mapGenerator.MasteredTopics.Add(topicLabel, true); // Track this topic as mastered
-                            StartCoroutine(DelayedOnAskQuestion());
-                        }
-                    }
                 }
                 else
                 {
@@ -206,6 +199,35 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         }
     }
 
+    private void ProcessAIResponse(string messageContent)
+    {
+        if (messageContent.ToLower().Contains("correct") || messageContent.ToLower().Contains("congratulations"))
+        {
+            if (messageContent.ToLower().Contains("riddle"))
+            {
+                playerPoints += 70;
+            }
+            else if (messageContent.ToLower().Contains("mcq"))
+            {
+                playerPoints += 10;
+            }
+            else if (messageContent.ToLower().Contains("video") && !videoWatched)
+            {
+                playerPoints += 10;
+                videoWatched = true;
+            }
+
+            if (playerPoints >= 70)
+            {
+                responseText.text += "\nCongratulations! You have completed the house.";
+                // Update the mastered topics with points
+                if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel))
+                {
+                    mapGenerator.MasteredTopics.Add(topicLabel, true);
+                }
+            }
+        }
+    }
 
     private IEnumerator DelayedOnAskQuestion()
     {
@@ -214,9 +236,16 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         Debug.Log("Delay finished, calling OnAskQuestion");
         gameCompletion.OnAskQuestion();
     }
-
 }
+
 // Helper classes to parse OpenAI response
+[System.Serializable]
+public class OpenAIMessage
+{
+    public string role;
+    public string content;
+}
+
 [System.Serializable]
 public class OpenAIRequest
 {
@@ -224,13 +253,6 @@ public class OpenAIRequest
     public OpenAIMessage[] messages;
     public int max_tokens;
     public float temperature;
-}
-
-[System.Serializable]
-public class OpenAIMessage
-{
-    public string role;
-    public string content;
 }
 
 [System.Serializable]
