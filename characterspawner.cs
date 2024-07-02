@@ -19,7 +19,11 @@ public class CharacterSpawner : MonoBehaviour
     {
         public string Label { get; set; }
         public string Transcript { get; set; }
+        public float NormalizedTranscriptLength { get; set; }
+        public string URL { get; set; } // Add this line
     }
+
+
 
     private List<CharacterAI> spawnedCharacters = new List<CharacterAI>();
     private List<SpawnCharacterAI> startSpawnedCharacters = new List<SpawnCharacterAI>();
@@ -67,7 +71,9 @@ public class CharacterSpawner : MonoBehaviour
                 topics.Add(new TopicInfo
                 {
                     Label = trimmedLabel,
-                    Transcript = transcript
+                    Transcript = transcript,
+                    NormalizedTranscriptLength = coordinate.NormalizedTranscriptLength,
+                    URL = coordinate.URL // Add this line
                 });
             }
             else
@@ -79,9 +85,11 @@ public class CharacterSpawner : MonoBehaviour
         return topics;
     }
 
-    private List<(string Label, float NormalizedTranscriptLength)> ReadCoordinatesFromCSV(TextAsset csvFile)
+
+
+    private List<(string Label, float NormalizedTranscriptLength, string URL)> ReadCoordinatesFromCSV(TextAsset csvFile)
     {
-        List<(string Label, float NormalizedTranscriptLength)> coordinates = new List<(string Label, float NormalizedTranscriptLength)>();
+        List<(string Label, float NormalizedTranscriptLength, string URL)> coordinates = new List<(string Label, float NormalizedTranscriptLength, string URL)>();
 
         try
         {
@@ -98,13 +106,14 @@ public class CharacterSpawner : MonoBehaviour
             {
                 var values = SplitCsvLine(line);
 
-                if (values.Length >= 6)
+                if (values.Length >= 7) // Update to ensure URL column is included
                 {
                     if (float.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float normalizedTranscriptLength))
                     {
                         string label = values[4].Trim().Trim('"');
-                        coordinates.Add((label, normalizedTranscriptLength));
-                        Debug.Log($"Parsed coordinate: {label} with normalized transcript length: {normalizedTranscriptLength}");
+                        string url = values[6].Trim().Trim('"'); // URL is expected to be the 7th column
+                        coordinates.Add((label, normalizedTranscriptLength, url));
+                        Debug.Log($"Parsed coordinate: {label} with normalized transcript length: {normalizedTranscriptLength} and URL: {url}");
                     }
                     else
                     {
@@ -175,6 +184,8 @@ public class CharacterSpawner : MonoBehaviour
                 continue;
             }
 
+            int numSegments = Mathf.Max(1, Mathf.FloorToInt(topic.NormalizedTranscriptLength));
+
             for (int i = 0; i < housePositions.Count; i++)
             {
                 Vector3 housePosition = housePositions[i];
@@ -192,8 +203,8 @@ public class CharacterSpawner : MonoBehaviour
                 if (characterAI != null)
                 {
                     Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
-                    string characterTranscript = GetTranscriptSegment(topic.Transcript, housePositions.Count, i);
-                    characterAI.Initialize($"{topic.Label} - Part {i + 1}", characterTranscript);
+                    string characterTranscript = GetTranscriptSegment(topic.Transcript, numSegments, i % numSegments);
+                    characterAI.Initialize($"{topic.Label} - Part {i + 1}", characterTranscript, topic.URL);  // Pass the URL
                     spawnedCharacters.Add(characterAI);
                 }
                 else
@@ -225,6 +236,8 @@ public class CharacterSpawner : MonoBehaviour
             }
         }
     }
+
+
 
     public void spawnSpawnCharacter(Vector3 position, int index)
     {
