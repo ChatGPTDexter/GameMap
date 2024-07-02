@@ -10,7 +10,7 @@ public class HouseNames : MonoBehaviour
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
     public string duplicateLayerName = "MiniMapOnly"; // Name of the layer for duplicates
 
-    private const string OpenAIAPIKey = "api-key";
+    private const string OpenAIAPIKey = "APIKEY";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
@@ -158,7 +158,6 @@ public class HouseNames : MonoBehaviour
             }
         }
     }
-
 
     private IEnumerator ProcessCSVData()
     {
@@ -389,14 +388,24 @@ public class HouseNames : MonoBehaviour
         return fields.ToArray();
     }
 
-    public void ChangeCompletedColors(Dictionary<int, Dictionary<string, bool>> clusterMasteryStatus)
+    public void ChangeCompletedColors(Dictionary<int, Dictionary<string, int>> clusterPoints)
     {
-        foreach (var cluster in clusterMasteryStatus)
+        foreach (var cluster in clusterPoints)
         {
-            foreach (var labelStatus in cluster.Value)
+            bool allHousesCompleted = true;
+            foreach (var labelPoints in cluster.Value)
             {
-                string label = labelStatus.Key.Trim(); // Trim whitespace from label
-                bool isMastered = labelStatus.Value;
+                if (labelPoints.Value < 70)
+                {
+                    allHousesCompleted = false;
+                    break;
+                }
+            }
+
+            foreach (var labelPoints in cluster.Value)
+            {
+                string label = labelPoints.Key.Trim(); // Trim whitespace from label
+                int points = labelPoints.Value;
 
                 // Check if the label exists in nameMappings
                 if (nameMappings.ContainsKey(label))
@@ -409,8 +418,8 @@ public class HouseNames : MonoBehaviour
                         TextMeshPro textMesh = nameObject.GetComponent<TextMeshPro>();
                         if (textMesh != null && textMesh.text.Trim() == generatedName)
                         {
-                            // Change color based on mastery status
-                            textMesh.color = isMastered ? Color.green : Color.white;
+                            // Change color based on whether all houses in the cluster are completed
+                            textMesh.color = allHousesCompleted ? Color.green : Color.white;
                         }
                     }
                 }
