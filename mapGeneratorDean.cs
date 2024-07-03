@@ -9,7 +9,7 @@ using System.Linq;
 public class MapGenerator : MonoBehaviour
 {
     [SerializeField] private GameObject player; // Assign the player object here
-
+    public Dictionary<string, int> TopicPoints = new Dictionary<string, int>();
     public TextAsset houseCsvFile; // Assign your house CSV file here in the Inspector
     public TextAsset mstCsvFile; // Assign your MST CSV file here in the Inspector
     public List<GameObject> housePrefabs; // Assign multiple house prefabs here
