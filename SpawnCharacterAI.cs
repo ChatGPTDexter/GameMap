@@ -1,4 +1,4 @@
-    using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -65,7 +65,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are the second npc that the character interacts with in this game. Say to him that to escape from this world they need collect the scattered rocket ship parts, one from each region in this world. Tell him to chose the region they would like to start in between {clusterNames[0]}, {clusterNames[1]}, {clusterNames[2]},{clusterNames[3]}, and {clusterNames[4]}. DON'T PROVIDE MORE INFORMATION!"
+            content = $"You are the second npc that the character interacts with in this game. Say to him that to escape from this world they need collect the scattered rocket ship parts, one from each region in this world, and bring them to the platform near here to assemble the rocket ship. Tell him to chose the region they would like to start in between {clusterNames[0]}, {clusterNames[1]}, {clusterNames[2]},{clusterNames[3]}, and {clusterNames[4]}. DON'T PROVIDE MORE INFORMATION!"
         });
 
 
@@ -199,6 +199,8 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
                             index++;
                         }
                     }
+
+                    gameCompletion.OnAskQuestion();
                 }
                 else
                 {
