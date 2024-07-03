@@ -22,8 +22,9 @@ public class MapGenerator : MonoBehaviour
     public GameObject waterPrefab; // Assign the water prefab here
     public float waterHeight = 2f; // Height of the water
     public float checkRadius = 10f; // Radius to check for nearby houses
-    //public List<GameObject> brokenParts; // Assign biomes here
-    //public GameObject fire;
+    public GameObject platform;
+    private ProgressBar progressBar;
+
     public Dictionary<string, List<Quaternion>> houseRotationsByLabel = new Dictionary<string, List<Quaternion>>();
     public GameObject cubePrefab; // Assign the cube prefab here
     public GameObject houseLabelPrefab; // Assign a prefab for the house labels here
@@ -43,7 +44,7 @@ public class MapGenerator : MonoBehaviour
     public Dictionary<int, Vector3> terrainStartPoints = new Dictionary<int, Vector3>();
     public Dictionary<int, Vector2> terrainSizes = new Dictionary<int, Vector2>();
     public Vector3 spawnPos;
-
+    public Vector3 blockPos;
 
 
     public Dictionary<string, bool> masteredTopics = new Dictionary<string, bool>();
@@ -267,51 +268,6 @@ public class MapGenerator : MonoBehaviour
         SpawnBiomeObjects(islandBiome, islandCenter);
     }
 
-    /*
-    void SpawnPartsNearPoint(Vector3 randomPos, Terrain terrain)
-    {
-        foreach (GameObject part in brokenParts)
-        {
-            GameObject spawnedPart = Instantiate(part, GetRandomPositionNearPoint(randomPos, spawnRadius, terrain), Quaternion.identity);
-            AddPhysicsComponents(spawnedPart);
-        }
-    }
-
-    Vector3 GetRandomPositionNearPoint(Vector3 point, float radius, Terrain terrain)
-    {   
-        Vector2 randomCircle = UnityEngine.Random.insideUnitCircle * radius;
-        float actualHeight = terrain.SampleHeight(new Vector3(point.x + randomCircle.x, 0, point.z + randomCircle.y));
-        return new Vector3(point.x + randomCircle.x, actualHeight, point.z + randomCircle.y);
-    }
-
-    bool IsTooCloseToOtherParts(Vector3 position, List<Vector3> otherPositions, float minDistance)
-    {
-        foreach (Vector3 otherPosition in otherPositions)
-        {
-            if (Vector3.Distance(position, otherPosition) < minDistance)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void AddPhysicsComponents(GameObject obj)
-    {
-        // Add a Rigidbody if it doesn't already have one
-        if (obj.GetComponent<Rigidbody>() == null)
-        {
-            obj.AddComponent<Rigidbody>();
-        }
-
-        // Ensure the object has at least one collider
-        if (obj.GetComponent<Collider>() == null)
-        {
-            // Add a default BoxCollider if no collider is present
-            obj.AddComponent<BoxCollider>();
-        }
-    }
-    */
     void AdjustTerrainAroundHouses()
     {
         float adjustmentRadius = 30f; // Adjust this radius as needed
@@ -808,10 +764,10 @@ public class MapGenerator : MonoBehaviour
                     );
 
                     Vector3 housePosition = mainPosition + offset;
-                    
+
                     // Adjust terrain above water level before instantiating the house
                     AdjustTerrainAboveWater(housePosition, terrain, 50f);
-                    
+
                     // Re-sample terrain height after adjustment
                     float terrainHeight = terrain.SampleHeight(housePosition);
                     housePosition.y = terrainHeight;
@@ -854,10 +810,10 @@ public class MapGenerator : MonoBehaviour
                     );
 
                     Vector3 housePosition = mainPosition + offset;
-                    
+
                     // Adjust terrain above water level before instantiating the house
                     AdjustTerrainAboveWater(housePosition, terrain, 50f);
-                    
+
                     // Re-sample terrain height after adjustment
                     float terrainHeight = terrain.SampleHeight(housePosition);
                     housePosition.y = terrainHeight;
