@@ -266,6 +266,47 @@ public class MapGenerator : MonoBehaviour
 
         SpawnBiomeObjects(islandBiome, islandCenter);
     }
+    void AdjustTerrainAboveWater(Vector3 position, Terrain terrain, float radius)
+    {
+        TerrainData terrainData = terrain.terrainData;
+        Vector3 terrainPos = terrain.transform.position;
+
+        int xResolution = terrainData.heightmapResolution;
+        int zResolution = terrainData.heightmapResolution;
+
+        float relativeX = (position.x - terrainPos.x) / terrainData.size.x * xResolution;
+        float relativeZ = (position.z - terrainPos.z) / terrainData.size.z * zResolution;
+
+        int radiusInHeightmap = Mathf.RoundToInt(radius / terrainData.size.x * xResolution);
+
+        int startX = Mathf.Clamp(Mathf.RoundToInt(relativeX) - radiusInHeightmap, 0, xResolution - 1);
+        int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radiusInHeightmap, 0, zResolution - 1);
+        int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radiusInHeightmap, 0, xResolution - 1);
+        int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radiusInHeightmap, 0, zResolution - 1);
+
+        float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX + 1, endZ - startZ + 1);
+
+        bool terrainAdjusted = false;
+        float minHeightAboveWater = (waterHeight + 0.5f) / terrainData.size.y; // Ensure it's at least 0.5 units above water
+
+        for (int x = 0; x < heights.GetLength(0); x++)
+        {
+            for (int z = 0; z < heights.GetLength(1); z++)
+            {
+                if (heights[x, z] < minHeightAboveWater)
+                {
+                    heights[x, z] = minHeightAboveWater;
+                    terrainAdjusted = true;
+                }
+            }
+        }
+
+        if (terrainAdjusted)
+        {
+            terrainData.SetHeights(startX, startZ, heights);
+            Debug.Log($"Terrain adjusted above water level at position {position}");
+        }
+    }
 
   
     void PlaceWater()
@@ -662,6 +703,7 @@ public class MapGenerator : MonoBehaviour
                         0,
                         row * adjustedHouseSpacingZ - length / 2
                     );
+                    AdjustTerrainAboveWater(housePosition, terrain, 50f);
 
                     Vector3 housePosition = mainPosition + offset;
                     float terrainHeight = terrain.SampleHeight(housePosition);
@@ -723,6 +765,7 @@ public class MapGenerator : MonoBehaviour
                     Vector3 housePosition = mainPosition + offset;
                     float terrainHeight = terrain.SampleHeight(housePosition);
                     housePosition.y = terrainHeight;
+                    AdjustTerrainAboveWater(housePosition, terrain, 50f);
 
                     // Ensure house does not fall on the main road
                     if (IsOnMainRoad(housePosition))
