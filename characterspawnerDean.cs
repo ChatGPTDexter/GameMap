@@ -236,117 +236,155 @@ public class CharacterSpawner : MonoBehaviour
         return string.Join(" ", words.Skip(start).Take(end - start));
     }
 
-    private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas)
+private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas)
+{
+    if (characterAI == null || uiCanvas == null)
     {
-        if (characterAI == null || uiCanvas == null)
-        {
-            Debug.LogError("CharacterAI or uiCanvas is null.");
-            return;
-        }
-
-        uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
-
-        TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
-
-        TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
-                                         .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
-
-        Button submitButton = uiCanvas.GetComponentInChildren<Button>();
-
-        if (inputField != null)
-        {
-            characterAI.userInputField = inputField;
-            // Manually set the position and size of the input field
-            RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
-            inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
-            inputField.textComponent.fontSize = 20; // Set font size
-            inputField.textComponent.color = Color.black; // Set text color to black
-
-            // Ensure the Return key submits the question
-            inputField.onSubmit.AddListener(delegate { characterAI.OnAskQuestion(); });
-        }
-        else
-        {
-            Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
-        }
-
-        if (responseText != null)
-        {
-            characterAI.responseText = responseText;
-            responseText.fontSize = 24.0f;
-            responseText.color = Color.black;
-            responseText.enableAutoSizing = false;
-            responseText.alignment = TextAlignmentOptions.TopLeft;
-            responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
-            // Adjust the position and size of the response text box
-            RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
-            responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
-            responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
-            // Add a white background
-        }
-        else
-        {
-            Debug.LogWarning("No TMP_Text found in the UI Canvas.");
-        }
+        Debug.LogError("CharacterAI or uiCanvas is null.");
+        return;
     }
 
-    private void AssignUIElementsStart(SpawnCharacterAI sCharacterAI, GameObject uiCanvas)
+    uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
+
+    TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
+
+    TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
+                                     .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
+
+    Button submitButton = uiCanvas.GetComponentInChildren<Button>();
+
+    if (inputField != null)
     {
-        if (sCharacterAI == null || uiCanvas == null)
+        characterAI.userInputField = inputField;
+        // Manually set the position and size of the input field
+        RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
+        inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
+        inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+        inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
+        inputField.textComponent.fontSize = 20; // Set font size
+        inputField.textComponent.color = Color.black; // Set text color to black
+
+        // Ensure the Return key submits the question
+        inputField.onSubmit.AddListener(delegate { characterAI.OnAskQuestion(); });
+    }
+    else
+    {
+        Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
+    }
+
+    if (responseText != null)
+    {
+        characterAI.responseText = responseText;
+        responseText.fontSize = 24.0f;
+        responseText.color = Color.black;
+        responseText.enableAutoSizing = false;
+        responseText.alignment = TextAlignmentOptions.TopLeft;
+        responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        
+        // Adjust the position and size of the response text box to match the content box
+        RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
+
+        // Find the Content RectTransform
+        RectTransform contentRectTransform = uiCanvas.transform.Find("Content").GetComponent<RectTransform>();
+        
+        if (contentRectTransform != null)
         {
-            Debug.LogError("CharacterAI or uiCanvas is null.");
-            return;
-        }
+            // Match anchors, pivot, and width
+            responseTextRect.anchorMin = contentRectTransform.anchorMin;
+            responseTextRect.anchorMax = contentRectTransform.anchorMax;
+            responseTextRect.pivot = contentRectTransform.pivot;
+            responseTextRect.anchoredPosition = contentRectTransform.anchoredPosition;
+            responseTextRect.sizeDelta = new Vector2(contentRectTransform.rect.width, responseTextRect.sizeDelta.y);
 
-        uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
-
-        TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
-
-        TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
-                                         .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
-
-        Button submitButton = uiCanvas.GetComponentInChildren<Button>();
-
-        if (inputField != null)
-        {
-            sCharacterAI.userInputField = inputField;
-            // Manually set the position and size of the input field
-            RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
-            inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
-            inputField.textComponent.fontSize = 20; // Set font size
-            inputField.textComponent.color = Color.black; // Set text color to black
-
-            // Ensure the Return key submits the question
-            inputField.onSubmit.AddListener(delegate { sCharacterAI.OnAskQuestion(); });
-        }
-        else
-        {
-            Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
-        }
-
-        if (responseText != null)
-        {
-            sCharacterAI.responseText = responseText;
-            responseText.fontSize = 24.0f;
-            responseText.color = Color.black;
-            responseText.enableAutoSizing = false;
-            responseText.alignment = TextAlignmentOptions.TopLeft;
-            responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
-            // Adjust the position and size of the response text box
-            RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
-            responseTextRect.anchoredPosition = new Vector2(0, 60); // Adjust position
-            responseTextRect.sizeDelta = new Vector2(400, 100); // Adjust size
-            // Add a white background
+            // Ensure the vertical alignment is set to the top
+            responseText.verticalAlignment = VerticalAlignmentOptions.Top;
         }
         else
         {
-            Debug.LogWarning("No TMP_Text found in the UI Canvas.");
+            Debug.LogWarning("No Content RectTransform found in the UI Canvas.");
         }
     }
+    else
+    {
+        Debug.LogWarning("No TMP_Text found in the UI Canvas.");
+    }
+}
+
+
+private void AssignUIElementsStart(SpawnCharacterAI sCharacterAI, GameObject uiCanvas)
+{
+    if (sCharacterAI == null || uiCanvas == null)
+    {
+        Debug.LogError("SpawnCharacterAI or uiCanvas is null.");
+        return;
+    }
+
+    uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
+
+    TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
+
+    TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
+                                     .FirstOrDefault(t => t.gameObject.name != "Placeholder" && t.gameObject.name != inputField.textComponent.gameObject.name);
+
+    Button submitButton = uiCanvas.GetComponentInChildren<Button>();
+
+    if (inputField != null)
+    {
+        sCharacterAI.userInputField = inputField;
+        // Manually set the position and size of the input field
+        RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
+        inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
+        inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+        inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
+        inputField.textComponent.fontSize = 20; // Set font size
+        inputField.textComponent.color = Color.black; // Set text color to black
+
+        // Ensure the Return key submits the question
+        inputField.onSubmit.AddListener(delegate { sCharacterAI.OnAskQuestion(); });
+    }
+    else
+    {
+        Debug.LogWarning("No TMP_InputField found in the UI Canvas.");
+    }
+
+    if (responseText != null)
+    {
+        sCharacterAI.responseText = responseText;
+        responseText.fontSize = 24.0f;
+        responseText.color = Color.black;
+        responseText.enableAutoSizing = false;
+        responseText.alignment = TextAlignmentOptions.TopLeft;
+        responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
+
+        // Adjust the position and size of the response text box to match the content box
+        RectTransform responseTextRect = responseText.GetComponent<RectTransform>();
+
+        // Find the Content RectTransform
+        RectTransform contentRectTransform = uiCanvas.transform.Find("Content").GetComponent<RectTransform>();
+        
+        if (contentRectTransform != null)
+        {
+            // Match anchors, pivot, and width
+            responseTextRect.anchorMin = contentRectTransform.anchorMin;
+            responseTextRect.anchorMax = contentRectTransform.anchorMax;
+            responseTextRect.pivot = contentRectTransform.pivot;
+            responseTextRect.anchoredPosition = contentRectTransform.anchoredPosition;
+            responseTextRect.sizeDelta = new Vector2(contentRectTransform.rect.width, responseTextRect.sizeDelta.y);
+
+            // Ensure the vertical alignment is set to the top
+            responseText.verticalAlignment = VerticalAlignmentOptions.Top;
+        }
+        else
+        {
+            Debug.LogWarning("No Content RectTransform found in the UI Canvas.");
+        }
+    }
+    else
+    {
+        Debug.LogWarning("No TMP_Text found in the UI Canvas.");
+    }
+}
+
 
     private Vector3 GetHouseDimensions()
     {
