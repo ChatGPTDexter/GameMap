@@ -223,10 +223,15 @@ public class MapGenerator : MonoBehaviour
 
             if (i == 0)
             {
-                spawnPos = new Vector3(randomPosition.x - 20, randomPosition.y + 10, randomPosition.z + 20); 
+                spawnPos = new Vector3(randomPosition.x - 20, randomPosition.y + 10, randomPosition.z + 20);
                 player.transform.position = spawnPos;
-                //Instantiate(fire, new Vector3(randomPosition.x - 20, randomPosition.y, randomPosition.z + 20), Quaternion.identity);
-                //SpawnPartsNearPoint(player.transform.position, newTerrain);
+            }
+            else
+            {
+                float platformHeight = newTerrain.SampleHeight(new Vector3(randomPosition.x - 20, 0, randomPosition.z + 20));
+                Vector3 platformSpawnPos = new Vector3(randomPosition.x - 20, platformHeight - 1f, randomPosition.z + 20);
+                GameObject platformObj = Instantiate(platform, platformSpawnPos, Quaternion.identity);
+                blockPos = platformSpawnPos;
             }
         }
 
@@ -1135,6 +1140,7 @@ public class MapGenerator : MonoBehaviour
             player.transform.position = teleportPosition;
 
             Debug.Log($"Teleported to {teleportPosition}");
+            progressBar.DisplayProgressBar();
         }
         else
         {
