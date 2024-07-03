@@ -3,17 +3,19 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using TMPro;
+using UnityEngine.Video;
 using UnityEngine.UI;
+using System.Linq;
 
 public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 {
     public string topicLabel;
     public string transcript;
-    public string URL;  // Renamed from URL to videoURL
+    public string url;
     public TMP_InputField userInputField;
     public TMP_Text responseText;
 
-    private const string OpenAIAPIKey = "apikey";
+    private const string OpenAIAPIKey = "api";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
     private FirstPersonMovement firstPersonMovement;
     private MapGenerator mapGenerator;
@@ -22,96 +24,179 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     private CharacterSpawner characterSpawner;
     private GameCompletion gameCompletion;
     private TeleportBehavior teleportBehavior;
+    private HouseManager houseManager; // Reference to HouseManager
 
     // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     private bool interactionEnabled = false;
-
-    private int playerPoints = 0;
-    private bool videoWatched = false;
-
     public Vector3 GetPosition() => transform.position;
+
+    private int currentPoints = 0; // Track the current points for this house
+    private const int pointsThreshold = 40; // Points needed to complete the house
+    private bool videoWatched = false; // Track if the video has been watched
+
+    private VideoPlayer videoPlayer; // Video player for playing videos
+    private RawImage videoDisplay; // RawImage for displaying the video
 
     void Start()
     {
+        Debug.Log("CharacterAI Start method called.");
+
         firstPersonMovement = FindObjectOfType<FirstPersonMovement>();
         mapGenerator = FindObjectOfType<MapGenerator>();
-        jump = FindObjectOfType<Jump>();  // Assuming Jump script controls jumping behavior
-        miniMapController = FindObjectOfType<MiniMapController>();  // Assuming MiniMapController script handles mini-map functionality
-        characterSpawner = FindObjectOfType<CharacterSpawner>();  // Ensure characterSpawner is initialized
+        jump = FindObjectOfType<Jump>();
+        miniMapController = FindObjectOfType<MiniMapController>();
+        characterSpawner = FindObjectOfType<CharacterSpawner>();
         gameCompletion = FindObjectOfType<GameCompletion>();
         teleportBehavior = FindObjectOfType<TeleportBehavior>();
+        houseManager = FindObjectOfType<HouseManager>(); // Initialize HouseManager
+
+        videoDisplay = FindObjectOfType<RawImage>(); // Assuming there's only one RawImage in the scene
+        if (videoDisplay != null)
+        {
+            videoPlayer = videoDisplay.GetComponent<VideoPlayer>();
+            if (videoPlayer == null)
+            {
+                videoPlayer = videoDisplay.gameObject.AddComponent<VideoPlayer>();
+            }
+        }
+        else
+        {
+            Debug.LogError("RawImage for video display not found.");
+        }
+
+        if (userInputField == null) Debug.LogError("userInputField is not assigned.");
 
         // Listen for the Return key to submit the question
-        userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
+        if (userInputField != null)
+        {
+            userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
+        }
+        else
+        {
+            Debug.LogError("userInputField is null in Start method.");
+        }
 
         // Disable interaction initially
         DisableInteraction();
     }
 
-    public void Initialize(string label, string script, string URL)
+    public void Initialize(string label, string script, string url)
     {
         topicLabel = label;
         transcript = script;
-        this.URL = URL;
+        this.url = url;
+
+        Debug.Log($"CharacterAI initialized with label: {label}, script: {script}, url: {url}");
 
         // Initialize chat history with system message
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are an expert on the topic: {topicLabel}. Use the following segment of a transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, present the user with a choice between a very challenging riddle, multiple choice questions, and the link to the video related to the segment of transcript. Once the player chooses, prompt them with either the: {URL} if they say video (making sure to direct them to the correct time frame based on your segment of: {transcript}, if they want the riddle, prompt them with a very challenging riddle, and if they want MCQ's give them one question at a time. A player can choose to switch between the choices at any given time. For each correct MCQ the player will earn 10 points, for answering the riddle the player will earn 70 points, for watching the video the player will earn 10 points but they can only gain this 10 points once. Store the number of points and when the player reaches 70 points tell them that they have completed the house and congratulate them."
+            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, based on the user's response prompt them with either a very challenging riddle, multiple-choice questions (one at a time), or the video link: {url} if they want to watch the video. After the player reaches 40 points congratulate them and tell them they have passed your house. If the user solves a riddle correctly, respond with 'Correct! You have solved the riddle'. If the user answers a multiple-choice question correctly, respond with 'Correct! You answered the multiple-choice question'."
         });
+
+        // Add the initial question to the chat history
+        chatHistory.Add(new OpenAIMessage
+        {
+            role = "assistant",
+            content = $"Would you like to watch a video, solve a riddle, or answer multiple-choice questions (MCQs) about {topicLabel}? Type '1' for Riddle, '2' for MCQ, or '3' for Video."
+        });
+    }
+
+    void Update()
+    {
+        if (interactionEnabled)
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha1))
+            {
+                RequestRiddle();
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha2))
+            {
+                RequestMCQ();
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha3))
+            {
+                WatchVideo();
+            }
+        }
     }
 
     public void EnableInteraction()
     {
         interactionEnabled = true;
-        userInputField.gameObject.SetActive(true);
-        userInputField.Select();
-        userInputField.ActivateInputField();
+        if (userInputField != null)
+        {
+            userInputField.gameObject.SetActive(true);
+            userInputField.Select();
+            userInputField.ActivateInputField();
+        }
+        else
+        {
+            Debug.LogError("userInputField is null in EnableInteraction.");
+        }
 
         if (miniMapController != null)
         {
             miniMapController.canMiniMap = false;
+            Debug.Log("MiniMap disabled.");
         }
 
-        // Disable jumping
         if (jump != null)
         {
             jump.canJump = false;
+            Debug.Log("Jump disabled.");
         }
 
         if (teleportBehavior != null)
         {
             teleportBehavior.canTeleport = false;
+            Debug.Log("Teleport disabled.");
         }
     }
 
     public void DisableInteraction()
     {
         interactionEnabled = false;
-        userInputField.gameObject.SetActive(false);
+        if (userInputField != null)
+        {
+            userInputField.gameObject.SetActive(false);
+        }
+        else
+        {
+            Debug.LogError("userInputField is null in DisableInteraction.");
+        }
 
         if (miniMapController != null)
         {
             miniMapController.canMiniMap = true;
+            Debug.Log("MiniMap enabled.");
         }
 
         if (jump != null)
         {
             jump.canJump = true;
+            Debug.Log("Jump enabled.");
         }
 
         if (teleportBehavior != null)
         {
             teleportBehavior.canTeleport = true;
+            Debug.Log("Teleport enabled.");
         }
     }
 
     public void OnAskQuestion()
     {
         EnableInteraction();
+        if (userInputField == null)
+        {
+            Debug.LogError("userInputField is not assigned.");
+            return;
+        }
+
         string userQuestion = userInputField.text;
         if (!string.IsNullOrEmpty(userQuestion))
         {
@@ -123,6 +208,10 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             // Clear the input field after submission
             userInputField.text = string.Empty;
             userInputField.ActivateInputField();
+        }
+        else
+        {
+            Debug.LogError("userQuestion is null or empty in OnAskQuestion.");
         }
     }
 
@@ -161,7 +250,10 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError)
             {
                 Debug.LogError($"Error: {request.error}\nResponse: {request.downloadHandler.text}");
-                responseText.text = "There was an error processing your request. Please check the console for details.";
+                if (responseText != null)
+                {
+                    responseText.text = "There was an error processing your request. Please check the console for details.";
+                }
             }
             else
             {
@@ -175,77 +267,147 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                     // Update chat history with AI response
                     chatHistory.Add(new OpenAIMessage { role = "assistant", content = messageContent });
 
-                    responseText.text = messageContent;
+                    if (responseText != null)
+                    {
+                        responseText.text = messageContent;
+                    }
                     Debug.Log($"Setting response text to: {messageContent}");
 
-                    // Process the AI response for points and completion
-                    ProcessAIResponse(messageContent);
-
-                    // Debugging: Log the message content
-                    Debug.Log($"Message Content: {messageContent}");
-                    Debug.Log($"Trimmed and Lowercase Message Content: {messageContent.ToLower().Trim()}");
+                    // Simplified check for correct answers
+                    if (messageContent.ToLower().Contains("correct"))
+                    {
+                        if (chatHistory[chatHistory.Count - 2].content.ToLower().Contains("riddle"))
+                        {
+                            SolveRiddle(); // Add 40 points for solving a riddle
+                        }
+                        else if (chatHistory[chatHistory.Count - 2].content.ToLower().Contains("multiple-choice question"))
+                        {
+                            AddPoints(10); // Add 10 points for answering an MCQ
+                        }
+                    }
                 }
                 else
                 {
-                    responseText.text = "No response from AI.";
+                    if (responseText != null)
+                    {
+                        responseText.text = "No response from AI.";
+                    }
                 }
             }
-        }
 
-        // Re-enable movement after getting the response, only if interaction is still enabled
-        if (interactionEnabled && firstPersonMovement != null)
-        {
-            firstPersonMovement.EnableMovement();
+            if (interactionEnabled && firstPersonMovement != null)
+            {
+                firstPersonMovement.EnableMovement();
+            }
         }
     }
 
-    private void ProcessAIResponse(string messageContent)
+    public void RequestRiddle()
     {
-        if (messageContent.ToLower().Contains("correct") || messageContent.ToLower().Contains("congratulations"))
+        chatHistory.Add(new OpenAIMessage { role = "user", content = "I would like to solve a riddle." });
+        string prompt = GetChatHistoryAsString();
+        StartCoroutine(GetResponseFromAI(prompt));
+    }
+
+    public void RequestMCQ()
+    {
+        chatHistory.Add(new OpenAIMessage { role = "user", content = "I would like to answer a multiple-choice question." });
+        string prompt = GetChatHistoryAsString();
+        StartCoroutine(GetResponseFromAI(prompt));
+    }
+
+    public void WatchVideo()
+    {
+        if (!videoWatched && !string.IsNullOrEmpty(url))
         {
-            if (messageContent.ToLower().Contains("riddle"))
+            videoPlayer.source = VideoSource.Url;
+            videoPlayer.url = url;
+            videoPlayer.Play();
+
+            // Display the video UI element
+            videoDisplay.gameObject.SetActive(true);
+
+            // Add event listener to hide the video UI element when the video finishes
+            videoPlayer.loopPointReached += OnVideoFinished;
+
+            // Add points for watching the video
+            AddPoints(10);
+            videoWatched = true;
+        }
+        else
+        {
+            Debug.LogWarning("Video has already been watched or URL is empty.");
+        }
+    }
+
+    private void OnVideoFinished(VideoPlayer vp)
+    {
+        // Hide the video UI element when the video finishes
+        videoDisplay.gameObject.SetActive(false);
+    }
+
+    public void SolveRiddle()
+    {
+        AddPoints(40);
+        DisableInteraction();
+    }
+
+    public void AnswerMCQ()
+    {
+        AddPoints(10);
+        DisableInteraction();
+    }
+
+    private void AddPoints(int points)
+    {
+        currentPoints += points;
+        Debug.Log($"Points added: {points}. Current points: {currentPoints}");
+
+        if (currentPoints >= pointsThreshold)
+        {
+            CompleteHouse();
+        }
+    }
+
+    private void CompleteHouse()
+    {
+        if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel))
+        {
+            Debug.Log($"Mastered {topicLabel}");
+            mapGenerator.MasteredTopics.Add(topicLabel, true);
+
+            // Update the mastery status in HouseManager
+            if (houseManager != null)
             {
-                playerPoints += 70;
-            }
-            else if (messageContent.ToLower().Contains("mcq"))
-            {
-                playerPoints += 10;
-            }
-            else if (messageContent.ToLower().Contains("video") && !videoWatched)
-            {
-                playerPoints += 10;
-                videoWatched = true;
+                houseManager.UpdateClusterMasteryStatus();
             }
 
-            if (playerPoints >= 70)
+            // Notify the user immediately
+            if (responseText != null)
             {
-                responseText.text += "\nCongratulations! You have completed the house.";
-                // Update the mastered topics with points
-                if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel))
-                {
-                    mapGenerator.MasteredTopics.Add(topicLabel, true);
-                }
+                responseText.text = $"Congratulations! You have completed the points total for {topicLabel}.";
+            }
+
+            // Check if all houses related to the same label are completed
+            if (mapGenerator.AllHousesRelatedToLabelMastered(topicLabel))
+            {
+                gameCompletion.OnGameComplete();
+            }
+            else
+            {
+                StartCoroutine(DelayedOnAskQuestion());
             }
         }
     }
 
     private IEnumerator DelayedOnAskQuestion()
     {
-        Debug.Log("Waiting before calling OnAskQuestion...");
-        yield return new WaitForSeconds(1f); // Wait for 1 second
-        Debug.Log("Delay finished, calling OnAskQuestion");
+        yield return new WaitForSeconds(1f);
         gameCompletion.OnAskQuestion();
     }
 }
 
 // Helper classes to parse OpenAI response
-[System.Serializable]
-public class OpenAIMessage
-{
-    public string role;
-    public string content;
-}
-
 [System.Serializable]
 public class OpenAIRequest
 {
@@ -253,6 +415,13 @@ public class OpenAIRequest
     public OpenAIMessage[] messages;
     public int max_tokens;
     public float temperature;
+}
+
+[System.Serializable]
+public class OpenAIMessage
+{
+    public string role;
+    public string content;
 }
 
 [System.Serializable]
