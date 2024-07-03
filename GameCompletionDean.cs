@@ -10,7 +10,7 @@ public class GameCompletion : MonoBehaviour
     public Dictionary<int, bool> clusterMastery;
     private HashSet<int> displayedClusters;
     private ProgressBar progressBar;
-    
+
 
     private HouseNames houseNames;
     public Texture2D[] clusterTextures;
@@ -105,6 +105,8 @@ public class GameCompletion : MonoBehaviour
                 amountMastered++;
             }
         }
+
+        amountMastered++;
         if (progressBar != null)
         {
             progressBar.current = amountMastered;
