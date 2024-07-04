@@ -5,7 +5,6 @@ using UnityEngine.Networking;
 using TMPro;
 using UnityEngine.Video;
 using UnityEngine.UI;
-using System.Linq;
 
 public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 {
@@ -24,12 +23,14 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     private CharacterSpawner characterSpawner;
     private GameCompletion gameCompletion;
     private TeleportBehavior teleportBehavior;
-    private HouseManager houseManager; // Reference to HouseManager
 
     // List to maintain chat history
     private List<OpenAIMessage> chatHistory = new List<OpenAIMessage>();
 
     private bool interactionEnabled = false;
+    private bool awaitingRiddleAnswer = false; // Flag to track if waiting for riddle answer
+    private int riddleResponseCount = 0; // Counter for riddle responses
+
     public Vector3 GetPosition() => transform.position;
 
     private int currentPoints = 0; // Track the current points for this house
@@ -50,7 +51,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         characterSpawner = FindObjectOfType<CharacterSpawner>();
         gameCompletion = FindObjectOfType<GameCompletion>();
         teleportBehavior = FindObjectOfType<TeleportBehavior>();
-        houseManager = FindObjectOfType<HouseManager>(); // Initialize HouseManager
 
         videoDisplay = FindObjectOfType<RawImage>(); // Assuming there's only one RawImage in the scene
         if (videoDisplay != null)
@@ -190,7 +190,6 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void OnAskQuestion()
     {
-        EnableInteraction();
         if (userInputField == null)
         {
             Debug.LogError("userInputField is not assigned.");
@@ -273,17 +272,28 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                     }
                     Debug.Log($"Setting response text to: {messageContent}");
 
-                    // Simplified check for correct answers
-                    if (messageContent.ToLower().Contains("correct"))
+                    // Handle riddle responses
+                    if (awaitingRiddleAnswer)
                     {
-                        if (chatHistory[chatHistory.Count - 2].content.ToLower().Contains("riddle"))
+                        riddleResponseCount++;
+                        if (messageContent.ToLower().Contains("correct"))
                         {
-                            SolveRiddle(); // Add 40 points for solving a riddle
+                            SolveRiddle();
+                            awaitingRiddleAnswer = false;
                         }
-                        else if (chatHistory[chatHistory.Count - 2].content.ToLower().Contains("multiple-choice question"))
+                        else if (riddleResponseCount >= 3)
                         {
-                            AddPoints(10); // Add 10 points for answering an MCQ
+                            awaitingRiddleAnswer = false;
                         }
+                    }
+                    else if (chatHistory[chatHistory.Count - 2].content.ToLower().Contains("riddle"))
+                    {
+                        awaitingRiddleAnswer = true;
+                        riddleResponseCount = 0;
+                    }
+                    else if (messageContent.ToLower().Contains("correct"))
+                    {
+                        AddPoints(10); // Add 10 points for answering an MCQ
                     }
                 }
                 else
@@ -348,13 +358,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void SolveRiddle()
     {
-        AddPoints(40);
-        DisableInteraction();
-    }
-
-    public void AnswerMCQ()
-    {
-        AddPoints(10);
+        CompleteHouse(); // Complete the house directly when a riddle is solved
         DisableInteraction();
     }
 
@@ -376,36 +380,30 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             Debug.Log($"Mastered {topicLabel}");
             mapGenerator.MasteredTopics.Add(topicLabel, true);
 
-            // Update the mastery status in HouseManager
-            if (houseManager != null)
-            {
-                houseManager.UpdateClusterMasteryStatus();
-            }
-
             // Notify the user immediately
             if (responseText != null)
             {
                 responseText.text = $"Congratulations! You have completed the points total for {topicLabel}.";
             }
 
+            // Update the cluster mastery status
+            if (gameCompletion != null)
+            {
+                gameCompletion.OnAskQuestion();
+            }
+
             // Check if all houses related to the same label are completed
-            if (mapGenerator.AllHousesRelatedToLabelMastered(topicLabel))
+            bool allHousesMastered = mapGenerator.AllHousesRelatedToLabelMastered(topicLabel);
+            Debug.Log($"All houses related to {topicLabel} mastered: {allHousesMastered}");
+
+            if (allHousesMastered)
             {
                 gameCompletion.OnGameComplete();
             }
-            else
-            {
-                StartCoroutine(DelayedOnAskQuestion());
-            }
         }
     }
-
-    private IEnumerator DelayedOnAskQuestion()
-    {
-        yield return new WaitForSeconds(1f);
-        gameCompletion.OnAskQuestion();
-    }
 }
+
 
 // Helper classes to parse OpenAI response
 [System.Serializable]
