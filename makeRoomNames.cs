@@ -10,7 +10,7 @@ public class HouseNames : MonoBehaviour
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
     public string duplicateLayerName = "MiniMapOnly"; // Name of the layer for duplicates
 
-    private const string OpenAIAPIKey = "APIKEY";
+    private const string OpenAIAPIKey = "api";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
@@ -104,7 +104,7 @@ public class HouseNames : MonoBehaviour
         if (!string.IsNullOrEmpty(generatedName))
         {
             Debug.Log($"Cluster {clusterId} Name: {generatedName}");
-            clusterNames.Add(generatedName); 
+            clusterNames.Add(generatedName);
         }
         else
         {
@@ -388,38 +388,26 @@ public class HouseNames : MonoBehaviour
         return fields.ToArray();
     }
 
-    public void ChangeCompletedColors(Dictionary<int, Dictionary<string, int>> clusterPoints)
+    public void ChangeCompletedColors(Dictionary<int, Dictionary<string, bool>> clusterMasteryStatus)
     {
-        foreach (var cluster in clusterPoints)
+        foreach (var cluster in clusterMasteryStatus)
         {
-            bool allHousesCompleted = true;
-            foreach (var labelPoints in cluster.Value)
+            foreach (var labelStatus in cluster.Value)
             {
-                if (labelPoints.Value < 70)
-                {
-                    allHousesCompleted = false;
-                    break;
-                }
-            }
-
-            foreach (var labelPoints in cluster.Value)
-            {
-                string label = labelPoints.Key.Trim(); // Trim whitespace from label
-                int points = labelPoints.Value;
-
+                string label = labelStatus.Key.Trim(); // Trim whitespace from label
+                bool isMastered = labelStatus.Value;
                 // Check if the label exists in nameMappings
                 if (nameMappings.ContainsKey(label))
                 {
                     string generatedName = nameMappings[label];
-
                     // Find all TextMeshPro objects that match the generated name
                     foreach (var nameObject in nameObjects)
                     {
                         TextMeshPro textMesh = nameObject.GetComponent<TextMeshPro>();
                         if (textMesh != null && textMesh.text.Trim() == generatedName)
                         {
-                            // Change color based on whether all houses in the cluster are completed
-                            textMesh.color = allHousesCompleted ? Color.green : Color.white;
+                            // Change color based on mastery status
+                            textMesh.color = isMastered ? Color.green : Color.white;
                         }
                     }
                 }
