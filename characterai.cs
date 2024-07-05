@@ -14,7 +14,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     public TMP_InputField userInputField;
     public TMP_Text responseText;
 
-    private const string OpenAIAPIKey = "api";
+    private const string OpenAIAPIKey = "api-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
     private FirstPersonMovement firstPersonMovement;
     private MapGenerator mapGenerator;
@@ -38,7 +38,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     private bool videoWatched = false; // Track if the video has been watched
 
     private VideoPlayer videoPlayer; // Video player for playing videos
-    private RawImage videoDisplay; // RawImage for displaying the video
+    public RawImage videoDisplay; // RawImage for displaying the video
 
     void Start()
     {
@@ -66,11 +66,12 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             Debug.LogError("RawImage for video display not found.");
         }
 
-        if (userInputField == null) Debug.LogError("userInputField is not assigned.");
+        if (userInputField == null) Debug.LogError("userInputField is not assigned.");  
 
         // Listen for the Return key to submit the question
         if (userInputField != null)
-        {
+        {       
+            userInputField.onSubmit.RemoveAllListeners(); // Remove any existing listeners
             userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
         }
         else
@@ -195,7 +196,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             Debug.LogError("userInputField is not assigned.");
             return;
         }
-
+        Debug.Log("Question Asked!");
         string userQuestion = userInputField.text;
         if (!string.IsNullOrEmpty(userQuestion))
         {
