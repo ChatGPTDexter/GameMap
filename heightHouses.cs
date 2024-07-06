@@ -20,7 +20,7 @@ public class MapGenerator : MonoBehaviour
     public GameObject waterPrefab; // Assign the water prefab here
     public float waterHeight = 2f; // Height of the water
     public float checkRadius = 10f; // Radius to check for nearby houses
-    public Dictionary<string, List<Quaternion>> houseRotationsByLabel = new Dictionary<string, List<Quaternion>>(); 
+    public Dictionary<string, List<Quaternion>> houseRotationsByLabel = new Dictionary<string, List<Quaternion>>();
 
 
     public GameObject cubePrefab; // Assign the cube prefab here
@@ -44,7 +44,7 @@ public class MapGenerator : MonoBehaviour
     public GameObject platform;
     private ProgressBar progressBar;
     public Vector3 blockPos;
-    public Dictionary<string, bool> MasteredTopics = new Dictionary<string, bool>();
+    public Dictionary<string, Dictionary<int, bool>> MasteredTopics = new Dictionary<string, Dictionary<int, bool>>();
     public Dictionary<int, List<string>> clusterLabels = new Dictionary<int, List<string>>();
     public Dictionary<string, float> houseTranscriptLengths = new Dictionary<string, float>();
 
@@ -306,7 +306,7 @@ public class MapGenerator : MonoBehaviour
         }
     }
 
-  
+
     void PlaceWater()
     {
         if (waterPrefab == null)
@@ -1103,13 +1103,30 @@ public class MapGenerator : MonoBehaviour
     }
     public bool AllHousesMastered()
     {
-        return MasteredTopics.Values.All(mastered => mastered);
+        return MasteredTopics.Values.All(topic => topic.Values.All(mastered => mastered));
     }
 
     // Method to check if all houses related to a specific label are completed
     public bool AllHousesRelatedToLabelMastered(string label)
     {
-        return MasteredTopics.Where(topic => topic.Key.Contains(label)).All(topic => topic.Value);
+        // Check if the label exists in the MasteredTopics dictionary
+        if (MasteredTopics.ContainsKey(label))
+        {
+            // Check if all houses (values) related to the label are true
+            bool allTrue = MasteredTopics[label].Values.All(value => value);
+
+            // Check if the amount of true values equals the length of housePositionsByLabel[label]
+            if (housePositionsByLabel.TryGetValue(label, out List<Vector3> positions))
+            {
+                return allTrue && positions.Count == MasteredTopics[label].Count;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        // If the label doesn't exist, return false
+        return false;
     }
 
     public void TeleportTo(int clusterID)
