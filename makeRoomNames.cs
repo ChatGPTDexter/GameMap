@@ -10,7 +10,7 @@ public class HouseNames : MonoBehaviour
     public CSVData vidCords; // CSV containing coordinates (x, y, z)
     public string duplicateLayerName = "MiniMapOnly"; // Name of the layer for duplicates
 
-    private const string OpenAIAPIKey = "api";
+    private const string OpenAIAPIKey = "api-key";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private List<GameObject> nameObjects = new List<GameObject>(); // Keep track of created name objects
