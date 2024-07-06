@@ -39,6 +39,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
     private VideoPlayer videoPlayer; // Video player for playing videos
     public RawImage videoDisplay; // RawImage for displaying the video
+    public int labelIndex;
 
     void Start()
     {
@@ -127,7 +128,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void EnableInteraction()
     {
-        interactionEnabled = true;
+        interactionEnabled = false;
         if (userInputField != null)
         {
             userInputField.gameObject.SetActive(true);
@@ -160,7 +161,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void DisableInteraction()
     {
-        interactionEnabled = false;
+        interactionEnabled = true;
         if (userInputField != null)
         {
             userInputField.gameObject.SetActive(false);
@@ -378,8 +379,10 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
     {
         if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel))
         {
-            Debug.Log($"Mastered {topicLabel}");
-            mapGenerator.MasteredTopics.Add(topicLabel, true);
+            mapGenerator.MasteredTopics[topicLabel] = new Dictionary<int, bool>();
+            mapGenerator.MasteredTopics[topicLabel][labelIndex] = true;
+
+            Debug.Log($"This index:{labelIndex} for this topic: {topicLabel} is set to true");
 
             // Notify the user immediately
             if (responseText != null)
@@ -395,6 +398,8 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
 
             // Check if all houses related to the same label are completed
             bool allHousesMastered = mapGenerator.AllHousesRelatedToLabelMastered(topicLabel);
+
+            Debug.Log($"The neightborhood completion is set to: {allHousesMastered}");
             Debug.Log($"All houses related to {topicLabel} mastered: {allHousesMastered}");
 
             if (allHousesMastered)
