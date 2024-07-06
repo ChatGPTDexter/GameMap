@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Linq; // Add this directive for Linq methods
+
 
 public class GameCompletion : MonoBehaviour
 {
@@ -81,7 +83,7 @@ public class GameCompletion : MonoBehaviour
             return;
         }
 
-        Dictionary<string, bool> masteredTopics = mapGenerator.MasteredTopics;
+        Dictionary<string, Dictionary<int, bool>> masteredTopics = mapGenerator.MasteredTopics;
         Dictionary<int, List<string>> clusterLabels = mapGenerator.clusterLabels;
 
         clusterMasteryStatus = new Dictionary<int, Dictionary<string, bool>>();
@@ -96,7 +98,7 @@ public class GameCompletion : MonoBehaviour
             bool allTopicsMastered = true;
             foreach (var label in labels)
             {
-                bool isMastered = masteredTopics.ContainsKey(label) && masteredTopics[label];
+                bool isMastered = masteredTopics.ContainsKey(label) && masteredTopics[label].All(kv => kv.Value); ;
                 labelMasteryStatus[label] = isMastered;
                 allTopicsMastered &= isMastered;
             }
