@@ -236,7 +236,7 @@ public class CharacterSpawner : MonoBehaviour
                 // Set the canvas sorting order
                 canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
 
-                AssignUIElements(characterAI, uiCanvas);
+                AssignUIElements(characterAI, uiCanvas, i);
             }
         }
     }
@@ -256,7 +256,7 @@ public class CharacterSpawner : MonoBehaviour
         return string.Join(" ", words.Skip(start).Take(end - start));
     }
 
-    private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas)
+    private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas, int index)
     {
         if (characterAI == null || uiCanvas == null)
         {
@@ -296,6 +296,7 @@ public class CharacterSpawner : MonoBehaviour
         if (responseText != null)
         {
             characterAI.responseText = responseText;
+            characterAI.labelIndex = index;
             responseText.fontSize = 24.0f;
             responseText.color = Color.black;
             responseText.enableAutoSizing = false;
