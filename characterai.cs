@@ -96,14 +96,14 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, based on the user's response prompt them with either a very challenging riddle, multiple-choice questions (one at a time), or the video link: {url} if they want to watch the video. After the player reaches 40 points congratulate them and tell them they have passed your house. If the user solves a riddle correctly, respond with 'Correct! You have solved the riddle'. If the user answers a multiple-choice question correctly, respond with 'Correct! You answered the multiple-choice question'."
+            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, based on the user's response prompt them with either a very very challenging riddle based on your segment of the transcript, multiple-choice questions (one at a time), or the video link: {url} if they want to watch the video. After the player reaches 40 points congratulate them and tell them they have passed your house. If the user solves a riddle correctly, respond with 'Correct! You have solved the riddle'. If the user answers a multiple-choice question correctly, respond with 'Correct! You answered the multiple-choice question'."
         });
 
         // Add the initial question to the chat history
         chatHistory.Add(new OpenAIMessage
         {
             role = "assistant",
-            content = $"Would you like to watch a video, solve a riddle, or answer multiple-choice questions (MCQs) about {topicLabel}? Type '1' for Riddle, '2' for MCQ, or '3' for Video."
+            content = $"Would you like to watch a video, solve a very challenging riddle about {topicLabel}, or answer multiple-choice questions (MCQs) about {topicLabel}? Type '1' for Riddle, '2' for MCQ, or '3' for Video."
         });
     }
 
@@ -254,6 +254,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                 if (responseText != null)
                 {
                     responseText.text = "There was an error processing your request. Please check the console for details.";
+                    Debug.LogError("Setting error message in responseText.");
                 }
             }
             else
@@ -265,16 +266,20 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                     var firstChoice = jsonResponse.choices[0];
                     var messageContent = firstChoice.message.content.Trim();
 
-                    // Update chat history with AI response
                     chatHistory.Add(new OpenAIMessage { role = "assistant", content = messageContent });
 
                     if (responseText != null)
                     {
                         responseText.text = messageContent;
+                        Debug.Log($"Setting response text to: {messageContent}");
+                        // Log responseText properties
+                        Debug.Log($"responseText properties - Text: {responseText.text}, FontSize: {responseText.fontSize}, Color: {responseText.color}, Alignment: {responseText.alignment}");
                     }
-                    Debug.Log($"Setting response text to: {messageContent}");
+                    else
+                    {
+                        Debug.LogError("responseText is null.");
+                    }
 
-                    // Handle riddle responses
                     if (awaitingRiddleAnswer)
                     {
                         riddleResponseCount++;
@@ -303,6 +308,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
                     if (responseText != null)
                     {
                         responseText.text = "No response from AI.";
+                        Debug.LogWarning("No response from AI.");
                     }
                 }
             }
@@ -313,6 +319,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             }
         }
     }
+
 
     public void RequestRiddle()
     {
