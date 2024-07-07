@@ -159,39 +159,73 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         }
     }
 
-    public void DisableInteraction()
+public void EnableInteraction()
+{
+    interactionEnabled = false;
+    if (userInputField != null)
     {
-        interactionEnabled = true;
-        if (userInputField != null)
-        {
-            userInputField.gameObject.SetActive(false);
-        }
-        else
-        {
-            Debug.LogError("userInputField is null in DisableInteraction.");
-        }
-
-        if (miniMapController != null)
-        {
-            miniMapController.canMiniMap = true;
-            Debug.Log("MiniMap enabled.");
-        }
-
-        if (jump != null)
-        {
-            jump.canJump = true;
-            Debug.Log("Jump enabled.");
-        }
-
-        if (teleportBehavior != null)
-        {
-            teleportBehavior.canTeleport = true;
-            Debug.Log("Teleport enabled.");
-        }
+        userInputField.gameObject.SetActive(true);
+        userInputField.Select();
+        userInputField.ActivateInputField();
+    }
+    else
+    {
+        Debug.LogError("userInputField is null in EnableInteraction.");
     }
 
-    public void OnAskQuestion()
+    if (miniMapController != null)
     {
+        miniMapController.canMiniMap = false;
+        Debug.Log("MiniMap disabled.");
+    }
+
+    if (jump != null)
+    {
+        jump.canJump = false;
+        Debug.Log("Jump disabled.");
+    }
+
+    if (teleportBehavior != null)
+    {
+        teleportBehavior.canTeleport = false;
+        Debug.Log("Teleport disabled.");
+    }
+}
+
+public void DisableInteraction()
+{
+    interactionEnabled = true;
+    if (userInputField != null)
+    {
+        userInputField.gameObject.SetActive(false);
+    }
+    else
+    {
+        Debug.LogError("userInputField is null in DisableInteraction.");
+    }
+
+    if (miniMapController != null)
+    {
+        miniMapController.canMiniMap = true;
+        Debug.Log("MiniMap enabled.");
+    }
+
+    if (jump != null)
+    {
+        jump.canJump = true;
+        Debug.Log("Jump enabled.");
+    }
+
+    if (teleportBehavior != null)
+    {
+        teleportBehavior.canTeleport = true;
+        Debug.Log("Teleport enabled.");
+    }
+}
+
+public void OnAskQuestion()
+{
+    DisableInteraction();
         if (userInputField == null)
         {
             Debug.LogError("userInputField is not assigned.");
