@@ -1,4 +1,4 @@
-using System.Collections;
+    using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -25,7 +25,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
     public Vector3 GetPosition() => transform.position;
     private List<string> clusterNamesHere;
     private bool clusterNamesInitialized = false;
-    private TeleportBehavior teleportBehavior;
+    private TeleportBehavior teleportBehavior;  
 
     void Start()
     {
@@ -73,7 +73,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void EnableInteraction()
     {
-        interactionEnabled = true;
+        interactionEnabled = false;
         userInputField.gameObject.SetActive(true);
         userInputField.Select();
         userInputField.ActivateInputField();
@@ -97,7 +97,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void DisableInteraction()
     {
-        interactionEnabled = false;
+        interactionEnabled = true;
         userInputField.gameObject.SetActive(false);
 
         if (miniMapController != null)
@@ -120,7 +120,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
 
     public void OnAskQuestion()
     {
-        EnableInteraction();
+        DisableInteraction();
         string userQuestion = userInputField.text;
         if (!string.IsNullOrEmpty(userQuestion))
         {
