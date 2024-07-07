@@ -67,11 +67,11 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
             Debug.LogError("RawImage for video display not found.");
         }
 
-        if (userInputField == null) Debug.LogError("userInputField is not assigned.");  
+        if (userInputField == null) Debug.LogError("userInputField is not assigned.");
 
         // Listen for the Return key to submit the question
         if (userInputField != null)
-        {       
+        {
             userInputField.onSubmit.RemoveAllListeners(); // Remove any existing listeners
             userInputField.onSubmit.AddListener(delegate { OnAskQuestion(); });
         }
@@ -96,7 +96,7 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         chatHistory.Add(new OpenAIMessage
         {
             role = "system",
-            content = $"You are an expert on the topic: {topicLabel}. Use the following transcript: {transcript} to assist the user in learning about this topic. To make the learning experience more engaging, based on the user's response prompt them with either a very very challenging riddle based on your segment of the transcript, multiple-choice questions (one at a time), or the video link: {url} if they want to watch the video. After the player reaches 40 points congratulate them and tell them they have passed your house. If the user solves a riddle correctly, respond with 'Correct! You have solved the riddle'. If the user answers a multiple-choice question correctly, respond with 'Correct! You answered the multiple-choice question'."
+            content = $"You are an expert on the topic: {topicLabel}. To make the learning experience more engaging, based on the user's response prompt them with either a very very challenging riddle based on your segment of the transcript, multiple-choice questions (one at a time), or the video link: {url} if they want to watch the video (all of these based of a trasncript: {transcript}). After the player reaches 40 points congratulate them and tell them they have passed your house. If the user solves a riddle correctly, respond with 'Correct! You have solved the riddle'. If the user answers a multiple-choice question correctly, respond with 'Correct! You answered the multiple-choice question'."
         });
 
         // Add the initial question to the chat history
@@ -159,73 +159,40 @@ public class CharacterAI : MonoBehaviour, IInteractiveCharacter
         }
     }
 
-public void EnableInteraction()
-{
-    interactionEnabled = false;
-    if (userInputField != null)
+    public void DisableInteraction()
     {
-        userInputField.gameObject.SetActive(true);
-        userInputField.Select();
-        userInputField.ActivateInputField();
-    }
-    else
-    {
-        Debug.LogError("userInputField is null in EnableInteraction.");
+        interactionEnabled = true;
+        if (userInputField != null)
+        {
+            userInputField.gameObject.SetActive(false);
+        }
+        else
+        {
+            Debug.LogError("userInputField is null in DisableInteraction.");
+        }
+
+        if (miniMapController != null)
+        {
+            miniMapController.canMiniMap = true;
+            Debug.Log("MiniMap enabled.");
+        }
+
+        if (jump != null)
+        {
+            jump.canJump = true;
+            Debug.Log("Jump enabled.");
+        }
+
+        if (teleportBehavior != null)
+        {
+            teleportBehavior.canTeleport = true;
+            Debug.Log("Teleport enabled.");
+        }
     }
 
-    if (miniMapController != null)
+    public void OnAskQuestion()
     {
-        miniMapController.canMiniMap = false;
-        Debug.Log("MiniMap disabled.");
-    }
-
-    if (jump != null)
-    {
-        jump.canJump = false;
-        Debug.Log("Jump disabled.");
-    }
-
-    if (teleportBehavior != null)
-    {
-        teleportBehavior.canTeleport = false;
-        Debug.Log("Teleport disabled.");
-    }
-}
-
-public void DisableInteraction()
-{
-    interactionEnabled = true;
-    if (userInputField != null)
-    {
-        userInputField.gameObject.SetActive(false);
-    }
-    else
-    {
-        Debug.LogError("userInputField is null in DisableInteraction.");
-    }
-
-    if (miniMapController != null)
-    {
-        miniMapController.canMiniMap = true;
-        Debug.Log("MiniMap enabled.");
-    }
-
-    if (jump != null)
-    {
-        jump.canJump = true;
-        Debug.Log("Jump enabled.");
-    }
-
-    if (teleportBehavior != null)
-    {
-        teleportBehavior.canTeleport = true;
-        Debug.Log("Teleport enabled.");
-    }
-}
-
-public void OnAskQuestion()
-{
-    DisableInteraction();
+        DisableInteraction();
         if (userInputField == null)
         {
             Debug.LogError("userInputField is not assigned.");
@@ -306,8 +273,6 @@ public void OnAskQuestion()
                     {
                         responseText.text = messageContent;
                         Debug.Log($"Setting response text to: {messageContent}");
-                        // Log responseText properties
-                        Debug.Log($"responseText properties - Text: {responseText.text}, FontSize: {responseText.fontSize}, Color: {responseText.color}, Alignment: {responseText.alignment}");
                     }
                     else
                     {
@@ -421,33 +386,32 @@ public void OnAskQuestion()
         if (!mapGenerator.MasteredTopics.ContainsKey(topicLabel))
         {
             mapGenerator.MasteredTopics[topicLabel] = new Dictionary<int, bool>();
-            mapGenerator.MasteredTopics[topicLabel][labelIndex] = true;
+        } 
+        mapGenerator.MasteredTopics[topicLabel][labelIndex] = true;
 
-            Debug.Log($"This index:{labelIndex} for this topic: {topicLabel} is set to true");
+        Debug.Log($"This index:{labelIndex} for this topic: {topicLabel} is set to true");
 
-            // Notify the user immediately
-            if (responseText != null)
-            {
-                responseText.text = $"Congratulations! You have completed the points total for {topicLabel}.";
-            }
+        // Notify the user immediately
+        if (responseText != null)
+        {
+            responseText.text = $"Congratulations! You have completed the points total for {topicLabel}.";
+        }
 
-            // Update the cluster mastery status
+        // Check if all houses related to the same label are completed
+        bool allHousesMastered = mapGenerator.AllHousesRelatedToLabelMastered(topicLabel);
+
+        Debug.Log($"The neightborhood completion is set to: {allHousesMastered}");
+        Debug.Log($"All houses related to {topicLabel} mastered: {allHousesMastered}");
+
+        if (allHousesMastered)
+        {
             if (gameCompletion != null)
             {
                 gameCompletion.OnAskQuestion();
             }
-
-            // Check if all houses related to the same label are completed
-            bool allHousesMastered = mapGenerator.AllHousesRelatedToLabelMastered(topicLabel);
-
-            Debug.Log($"The neightborhood completion is set to: {allHousesMastered}");
-            Debug.Log($"All houses related to {topicLabel} mastered: {allHousesMastered}");
-
-            if (allHousesMastered)
-            {
-                gameCompletion.OnGameComplete();
-            }
+            gameCompletion.OnGameComplete();
         }
+        
     }
 }
 
