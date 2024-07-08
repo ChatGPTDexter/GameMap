@@ -47,6 +47,8 @@ public class MapGenerator : MonoBehaviour
     public Dictionary<string, Dictionary<int, bool>> MasteredTopics = new Dictionary<string, Dictionary<int, bool>>();
     public Dictionary<int, List<string>> clusterLabels = new Dictionary<int, List<string>>();
     public Dictionary<string, float> houseTranscriptLengths = new Dictionary<string, float>();
+    private Vector3 firstHouse;
+    private Vector3 secondHouse;
 
     void Start()
     {
@@ -144,7 +146,7 @@ public class MapGenerator : MonoBehaviour
         TerrainData terrainData = terrain.terrainData;
         Vector3 terrainSize = new Vector3(maxX - minX + 200, terrainData.size.y, maxZ - minZ + 200);
         terrainData.size = terrainSize;
-        terrain.transform.position = new Vector3(minX - 100, 0, minZ - 100);
+        terrain.transform.position = new Vector3(minX - 100, -0.1f, minZ - 100);
         Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
@@ -198,21 +200,43 @@ public class MapGenerator : MonoBehaviour
 
         List<Vector3> houseCoordinates = new List<Vector3>();
 
-        // Generate three random positions within the square island bounds
         for (int i = 0; i < 2; i++)
         {
-            // Generate random x and z positions within the square
-            float randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-            float randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
-            float randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 15 and 60
+            float randomX, randomZ, randomY;
+            Vector3 randomPosition;
 
-            // Calculate the random position within the square island
-            Vector3 randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
+            if (i == 0)
+            {
+                // Generate random x and z positions within the square for the first house
+                randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+                randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+                randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 10 and 15
 
-            // Elevate terrain around the random position
-            ElevateTerrainAround(newTerrain, randomPosition);
+                randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
+                firstHouse = randomPosition;
+            }
+            else
+            {
+                do
+                {
+                    randomX = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+                    randomZ = (float)(random.NextDouble() * 2 * islandRadius - islandRadius);
+                    randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 10 and 15
 
-            // Instantiate the house prefab at the adjusted height
+                    randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
+
+                    // Log the distance check for the second house
+                    Debug.Log($"Distance from firstHouse to new position: {Vector3.Distance(randomPosition, firstHouse)}");
+                    if (Vector3.Distance(randomPosition, firstHouse) < 20)
+                    {
+                        Debug.Log("We regenerate");
+                    }
+
+                } while (Vector3.Distance(randomPosition, firstHouse) < 20);
+
+                secondHouse = randomPosition;
+            }
+
             GameObject housePrefab = housePrefabs[UnityEngine.Random.Range(0, housePrefabs.Count)];
             float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
             GameObject house = Instantiate(housePrefab, new Vector3(randomPosition.x, randomPosition.y + (houseHeight / 2), randomPosition.z), Quaternion.identity);
@@ -224,15 +248,20 @@ public class MapGenerator : MonoBehaviour
             {
                 spawnPos = new Vector3(randomPosition.x - 20, randomPosition.y + 10, randomPosition.z + 20);
                 player.transform.position = spawnPos;
+                ElevateTerrainAround(newTerrain, randomPosition);
             }
             else
             {
+                ElevateTerrainAround(newTerrain, randomPosition);
+
                 float platformHeight = newTerrain.SampleHeight(new Vector3(randomPosition.x - 20, 0, randomPosition.z + 20));
                 Vector3 platformSpawnPos = new Vector3(randomPosition.x - 20, platformHeight - 1f, randomPosition.z + 20);
                 GameObject platformObj = Instantiate(platform, platformSpawnPos, Quaternion.identity);
                 blockPos = platformSpawnPos;
             }
         }
+
+
         Biome islandBiome = biomes[0];
 
         // Create and apply the biome's terrain layer
@@ -407,13 +436,14 @@ public class MapGenerator : MonoBehaviour
         }
 
         GenerateClusterTerrains(); // Generate terrains for each cluster
-
+        float minTerrainHeight = 100;
         foreach (var cluster in clusters)
         {
             foreach (var position in cluster.Value)
             {
                 ElevateTerrainAround(clusterTerrains[cluster.Key], position);
             }
+            adjustTerrainBase(clusterTerrains[cluster.Key],minTerrainHeight);
         }
 
         // Generate main roads from MST after terrain modification
@@ -437,24 +467,21 @@ public class MapGenerator : MonoBehaviour
 
             TerrainData terrainData = new TerrainData();
             terrainData.heightmapResolution = terrain.terrainData.heightmapResolution;
-            terrainData.size = new Vector3(clusterMax.x - clusterMin.x + 100, terrain.terrainData.size.y, clusterMax.z - clusterMin.z + 100);
+            terrainData.size = new Vector3(clusterMax.x - clusterMin.x + 400, terrain.terrainData.size.y, clusterMax.z - clusterMin.z + 400);
             GameObject terrainObject = Terrain.CreateTerrainGameObject(terrainData);
             Terrain newTerrain = terrainObject.GetComponent<Terrain>();
-            newTerrain.transform.position = new Vector3(clusterMin.x - 50, 0, clusterMin.z - 50);
+            newTerrain.transform.position = new Vector3(clusterMin.x - 200, 0, clusterMin.z - 200);
             clusterTerrains[cluster.Key] = newTerrain;
 
             float[,] heights = new float[terrainData.heightmapResolution, terrainData.heightmapResolution];
             originalHeights[cluster.Key] = heights;
             terrainData.SetHeights(0, 0, heights);
-
-            // Blend the edges of the terrain to smoothly transition to the water level
-            BlendTerrainEdges(newTerrain);
         }
     }
 
-    void BlendTerrainEdges(Terrain terrain)
+    void adjustTerrainBase(Terrain clusterTerrain, float minHeight)
     {
-        TerrainData terrainData = terrain.terrainData;
+        TerrainData terrainData = clusterTerrain.terrainData;
         int resolution = terrainData.heightmapResolution;
         float[,] heights = terrainData.GetHeights(0, 0, resolution, resolution);
 
@@ -462,13 +489,11 @@ public class MapGenerator : MonoBehaviour
         {
             for (int j = 0; j < resolution; j++)
             {
-                float distanceToEdge = Mathf.Min(i, j, resolution - i - 1, resolution - j - 1);
-                float blendFactor = Mathf.Clamp01(distanceToEdge / (resolution * 0.1f)); // Blend within 10% of the terrain size
-                heights[i, j] = Mathf.Lerp(waterHeight / terrainData.size.y, heights[i, j], blendFactor);
+                if (heights[i, j] < minHeight) minHeight = heights[i, j];
             }
         }
 
-        terrainData.SetHeights(0, 0, heights);
+        terrain.transform.position = new Vector3(minX - 100, minHeight - 0.01f, minZ - 100);
     }
 
     float CalculateSmootherParabolicHeightIncrement(float distance, float maxElevation, int radius)
@@ -706,7 +731,7 @@ public class MapGenerator : MonoBehaviour
                     Vector3 housePosition = mainPosition + offset;
                     float terrainHeight = terrain.SampleHeight(housePosition);
                     housePosition.y = terrainHeight;
-                    AdjustTerrainAboveWater(housePosition, terrain, 50f);
+                    //AdjustTerrainAboveWater(housePosition, terrain, 50f);
 
                     // Ensure house does not fall on the main road
                     if (IsOnMainRoad(housePosition))
@@ -718,29 +743,25 @@ public class MapGenerator : MonoBehaviour
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
                     GameObject house = Instantiate(housePrefab, new Vector3(housePosition.x, housePosition.y + (houseHeight / 2), housePosition.z), Quaternion.identity);
 
+                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
+
+
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
                     // Rotate house to face the main road
-                    RotateHouseToFaceMainRoad(house, housePosition);
+                    RotateHouseToFaceMainRoad(house, housePosition, cube);
 
                     // Save the rotation
                     houseRotationsByLabel[label].Add(house.transform.rotation);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
+                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
+                   
 
                     Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
                     GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
@@ -779,29 +800,27 @@ public class MapGenerator : MonoBehaviour
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
                     GameObject house = Instantiate(housePrefab, new Vector3(housePosition.x, housePosition.y + (houseHeight / 2), housePosition.z), Quaternion.identity);
 
+                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
+
+                    
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
+                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
+                    
+
                     // Rotate house to face the main road
-                    RotateHouseToFaceMainRoad(house, housePosition);
+                    RotateHouseToFaceMainRoad(house, housePosition, cube);
 
                     // Save the rotation
                     houseRotationsByLabel[label].Add(house.transform.rotation);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
+                
 
                     Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
                     GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
@@ -835,29 +854,25 @@ public class MapGenerator : MonoBehaviour
                     float houseHeight = housePrefab.GetComponent<Renderer>().bounds.size.y;
                     GameObject house = Instantiate(housePrefab, new Vector3(housePosition.x, housePosition.y + (houseHeight / 2), housePosition.z), Quaternion.identity);
 
+                    MeshFilter meshFilter = house.GetComponent<MeshFilter>(); 
+                    Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
+                    Vector3 houseScale = house.transform.localScale;
+                    houseSize = Vector3.Scale(houseSize, houseScale);
+
+                    Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
+                    GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
+                    cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
+
+                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
+                
+
                     // Rotate house to face the main road
-                    RotateHouseToFaceMainRoad(house, housePosition);
+                    RotateHouseToFaceMainRoad(house, housePosition, cube);
 
                     // Save the rotation
                     houseRotationsByLabel[label].Add(house.transform.rotation);
 
-                    MeshFilter meshFilter = house.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        Vector3 houseSize = meshFilter.sharedMesh.bounds.size;
-                        Vector3 houseScale = house.transform.localScale;
-                        houseSize = Vector3.Scale(houseSize, houseScale);
-
-                        Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
-                        GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
-                        cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                        Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
-                    }
-                    else
-                    {
-                        Debug.LogError("House prefab does not have a MeshFilter component.");
-                    }
+                
 
                     Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
                     GenerateSmallRoad(nearestPointOnMainRoad, housePosition, terrain);
@@ -879,12 +894,13 @@ public class MapGenerator : MonoBehaviour
         }
         return false;
     }
-    void RotateHouseToFaceMainRoad(GameObject house, Vector3 housePosition)
+    void RotateHouseToFaceMainRoad(GameObject house, Vector3 housePosition, GameObject cube)
     {
         Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
         Vector3 directionToFace = nearestPointOnMainRoad - housePosition;
         directionToFace.y = 0; // Keep the rotation on the horizontal plane
         house.transform.rotation = Quaternion.LookRotation(directionToFace);
+        cube.transform.rotation = Quaternion.LookRotation(directionToFace);
     }
 
     public Vector3 GetNearestPointOnMainRoad(Vector3 housePosition)
