@@ -231,7 +231,7 @@ public class CharacterSpawner : MonoBehaviour
                 // Apply a 180-degree rotation to the canvas around the Y-axis
                 uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-                uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+                uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
 
                 // Set the canvas sorting order
                 canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
@@ -279,11 +279,11 @@ public class CharacterSpawner : MonoBehaviour
 
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+            inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
+            inputFieldRect.sizeDelta = new Vector2(300, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
-            inputField.textComponent.color = Color.black; // Set text color to black
+            inputField.textComponent.color = Color.white; // Set text color to black
 
             // Ensure the Return key submits the question
             inputField.onSubmit.AddListener(delegate { characterAI.OnAskQuestion(); });
@@ -355,11 +355,11 @@ public class CharacterSpawner : MonoBehaviour
             sCharacterAI.userInputField = inputField;
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -40); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(400, 60); // Adjust size
+            inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
+            inputFieldRect.sizeDelta = new Vector2(300, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
-            inputField.textComponent.color = Color.black; // Set text color to black
+            inputField.textComponent.color = Color.white; // Set text color to black
 
             // Ensure the Return key submits the question
             inputField.onSubmit.AddListener(delegate { sCharacterAI.OnAskQuestion(); });
@@ -529,7 +529,7 @@ public class CharacterSpawner : MonoBehaviour
         // Apply a 180-degree rotation to the canvas around the Y-axis
         uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+        uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
 
         // Set the canvas sorting order (Remove the duplicate declaration)
         canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
@@ -576,7 +576,7 @@ public class CharacterSpawner : MonoBehaviour
         // Apply a 180-degree rotation to the canvas around the Y-axis
         uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+        uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
 
         // Set the canvas sorting order (Remove the duplicate declaration)
         canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
