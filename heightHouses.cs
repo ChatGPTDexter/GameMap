@@ -64,19 +64,16 @@ public class MapGenerator : MonoBehaviour
 
         if (housePrefabs == null || housePrefabs.Count == 0 || roadPrefab == null)
         {
-            Debug.LogError("Prefabs not assigned. Please assign prefabs in the Inspector.");
             return;
         }
 
         if (biomes == null || biomes.Count == 0)
         {
-            Debug.LogError("Biomes not assigned. Please assign biomes in the Inspector.");
             return;
         }
 
         if (terrain == null)
         {
-            Debug.LogError("Terrain not assigned. Please assign Terrain in the Inspector.");
             return;
         }
 
@@ -147,7 +144,6 @@ public class MapGenerator : MonoBehaviour
         Vector3 terrainSize = new Vector3(maxX - minX + 200, terrainData.size.y, maxZ - minZ + 200);
         terrainData.size = terrainSize;
         terrain.transform.position = new Vector3(minX - 100, -0.1f, minZ - 100);
-        Debug.Log($"Terrain size adjusted to {terrainData.size} and position to {terrain.transform.position}");
     }
 
     void RemoveTreesBelowHeight(float heightThreshold)
@@ -224,13 +220,6 @@ public class MapGenerator : MonoBehaviour
                     randomY = (float)(random.NextDouble() * (15 - 10) + 10); // Random Y between 10 and 15
 
                     randomPosition = new Vector3(islandCenter.x + randomX, randomY, islandCenter.z + randomZ);
-
-                    // Log the distance check for the second house
-                    Debug.Log($"Distance from firstHouse to new position: {Vector3.Distance(randomPosition, firstHouse)}");
-                    if (Vector3.Distance(randomPosition, firstHouse) < 20)
-                    {
-                        Debug.Log("We regenerate");
-                    }
 
                 } while (Vector3.Distance(randomPosition, firstHouse) < 20);
 
@@ -331,7 +320,6 @@ public class MapGenerator : MonoBehaviour
         if (terrainAdjusted)
         {
             terrainData.SetHeights(startX, startZ, heights);
-            Debug.Log($"Terrain adjusted above water level at position {position}");
         }
     }
 
@@ -366,13 +354,10 @@ public class MapGenerator : MonoBehaviour
             waterHeight,
             terrainPosition.z + terrainSize.z / 2
         );
-
-        Debug.Log("Water placed at height 2, size of terrain, and shape of square.");
     }
 
     void GenerateMapFromCSV()
     {
-        Debug.Log("GenerateMapFromCSV");
 
         StringReader reader = new StringReader(houseCsvFile.text);
 
@@ -402,7 +387,6 @@ public class MapGenerator : MonoBehaviour
 
             if (fields.Length < 6)
             {
-                Debug.LogWarning($"Skipping invalid row: {line}");
                 continue;
             }
 
@@ -428,10 +412,6 @@ public class MapGenerator : MonoBehaviour
                     clusterLabels[clusterId] = new List<string>();
                 }
                 clusterLabels[clusterId].Add(label);
-            }
-            else
-            {
-                Debug.LogWarning($"Failed to parse coordinates or other fields: {line}");
             }
         }
 
@@ -511,7 +491,6 @@ public class MapGenerator : MonoBehaviour
 
     void ElevateTerrainAround(Terrain terrain, Vector3 position)
     {
-        Debug.Log($"Elevating terrain around position: {position}");
 
         TerrainData terrainData = terrain.terrainData;
         Vector3 terrainPos = terrain.transform.position;
@@ -528,8 +507,6 @@ public class MapGenerator : MonoBehaviour
         int startZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) - radius, 0, zResolution - 1);
         int endX = Mathf.Clamp(Mathf.RoundToInt(relativeX) + radius, 0, xResolution - 1);
         int endZ = Mathf.Clamp(Mathf.RoundToInt(relativeZ) + radius, 0, zResolution - 1);
-
-        Debug.Log($"Elevating terrain at range: ({startX},{startZ}) to ({endX},{endZ})");
 
         // Get the current heights
         float[,] heights = terrainData.GetHeights(startX, startZ, endX - startX, endZ - startZ);
@@ -554,7 +531,6 @@ public class MapGenerator : MonoBehaviour
 
         // Set the modified heights back to the terrain
         terrainData.SetHeights(startX, startZ, heights);
-        Debug.Log("Terrain elevation applied");
     }
 
     void AssignBiomesToClusters()
@@ -595,8 +571,6 @@ public class MapGenerator : MonoBehaviour
             {
                 ApplyTextureToTerrain(terrain, position, newLayer);
             }
-
-            Debug.Log("Biome textures applied successfully.");
         }
     }
 
@@ -634,7 +608,6 @@ public class MapGenerator : MonoBehaviour
 
     void GenerateMainRoadFromMST()
     {
-        Debug.Log("GenerateMainRoadFromMST");
 
         StringReader reader = new StringReader(mstCsvFile.text);
 
@@ -670,18 +643,6 @@ public class MapGenerator : MonoBehaviour
                 Vector3 position1 = housePositions[house1];
                 Vector3 position2 = housePositions[house2];
                 GenerateMainRoad(position1, position2);
-            }
-            else
-            {
-                Debug.LogWarning($"House label not found for: {line}");
-                if (!housePositions.ContainsKey(house1))
-                {
-                    Debug.LogWarning($"House label not found: {house1}");
-                }
-                if (!housePositions.ContainsKey(house2))
-                {
-                    Debug.LogWarning($"House label not found: {house2}");
-                }
             }
         }
     }
@@ -759,8 +720,6 @@ public class MapGenerator : MonoBehaviour
 
                     // Save the rotation
                     houseRotationsByLabel[label].Add(house.transform.rotation);
-
-                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
                    
 
                     Vector3 nearestPointOnMainRoad = GetNearestPointOnMainRoad(housePosition);
@@ -810,8 +769,6 @@ public class MapGenerator : MonoBehaviour
                     Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
                     GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
                     cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
                     
 
                     // Rotate house to face the main road
@@ -862,8 +819,6 @@ public class MapGenerator : MonoBehaviour
                     Vector3 cubePosition = new Vector3(housePosition.x, housePosition.y - (houseSize.y / 1.5f), housePosition.z);
                     GameObject cube = Instantiate(cubePrefab, cubePosition, Quaternion.identity);
                     cube.transform.localScale = new Vector3(houseSize.x / 3.5f, houseSize.y / 3, houseSize.z / 3.5f);
-
-                    Debug.Log($"Spawning house at y={housePosition.y} and cube at y={housePosition.y - (houseSize.y / 2)} with scale {houseSize}");
                 
 
                     // Rotate house to face the main road
@@ -923,7 +878,6 @@ public class MapGenerator : MonoBehaviour
     }
     void GenerateSmallRoad(Vector3 mainRoadPosition, Vector3 housePosition, Terrain terrain)
     {
-        Debug.Log($"Generating small road between {mainRoadPosition} and {housePosition}");
 
         // Calculate the number of segments based on the distance
         int segments = Mathf.CeilToInt(Vector3.Distance(mainRoadPosition, housePosition) / 1f); // Increase the number of segments
@@ -944,7 +898,6 @@ public class MapGenerator : MonoBehaviour
 
     void CreateRoadBetween(Vector3 position1, Vector3 position2, Terrain terrain)
     {
-        Debug.Log($"Creating road between {position1} and {position2}");
 
         Vector3 midPoint = (position1 + position2) / 2;
         float roadLength = Vector3.Distance(position1, position2);
@@ -977,7 +930,6 @@ public class MapGenerator : MonoBehaviour
 
     void GenerateMainRoad(Vector3 position1, Vector3 position2)
     {
-        Debug.Log($"Generating main road segment between {position1} and {position2}");
 
         // Find the cluster ID for the start and end positions
         int clusterId1 = clusters.First(c => c.Value.Contains(position1)).Key;
@@ -1165,8 +1117,6 @@ public class MapGenerator : MonoBehaviour
 
             // Teleport the GameObject to the calculated position
             player.transform.position = teleportPosition;
-
-            Debug.Log($"Teleported to {teleportPosition}");
 
             progressBar.DisplayProgressBar();
         }
