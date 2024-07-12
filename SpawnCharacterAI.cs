@@ -1,4 +1,4 @@
-    using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -41,7 +41,6 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
         userInputField.onSubmit.AddListener(delegate 
         { 
             OnAskQuestion();
-            Debug.Log("Question Asked!");
         });
 
         // Disable interaction initially
@@ -219,9 +218,7 @@ public class SpawnCharacterAI : MonoBehaviour, IInteractiveCharacter
 
     private IEnumerator DelayedOnAskQuestion()
     {
-        Debug.Log("Waiting before calling OnAskQuestion...");
         yield return new WaitForSeconds(1f); // Wait for 1 second
-        Debug.Log("Delay finished, calling OnAskQuestion");
         gameCompletion.OnAskQuestion();
     }
 
