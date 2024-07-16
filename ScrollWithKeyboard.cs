@@ -3,8 +3,19 @@ using UnityEngine.UI;
 
 public class ScrollWithKeyboard : MonoBehaviour
 {
-    public ScrollRect scrollRect; // Reference to the ScrollRect component
-    public float scrollSpeed = 0.1f; // Adjust the scrolling speed
+    public ScrollRect scrollRect;
+    public Scrollbar verticalScrollbar;
+    public float scrollSpeed = 0.1f;
+
+    void Start()
+    {
+        // Force the scrollbar to be visible
+        if (verticalScrollbar != null)
+        {
+            verticalScrollbar.size = 0.9f;
+            scrollRect.verticalNormalizedPosition = 1f;
+        }
+    }
 
     void Update()
     {
