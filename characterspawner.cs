@@ -8,12 +8,14 @@ using UnityEngine.UI;
 
 public class CharacterSpawner : MonoBehaviour
 {
+    private ApiRequest apiRequest;
     [SerializeField] private GameObject characterPrefab;
     [SerializeField] private GameObject spawnCharacterPrefab; // Assign the spawnCharacterAI here
     [SerializeField] private GameObject uiCanvasPrefab;
     [SerializeField] public TextAsset coordinatesCsvFile;
     [SerializeField] public TextAsset transcriptsCsvFile;
     [SerializeField] private MapGenerator mapGenerator; // Reference to MapGenerator script
+    [SerializeField] private Camera mainCamera; 
 
     private class TopicInfo
     {
@@ -29,19 +31,34 @@ public class CharacterSpawner : MonoBehaviour
 
     public Dictionary<string, bool> MasteredTopics => masteredTopics;
     public Vector3 secondCord;
-
     void Start()
     {
+        apiRequest = FindObjectOfType<ApiRequest>();
+        if (apiRequest == null)
+        {
+            Debug.LogError("ApiRequest component not found in the scene.");
+            return;
+        }
+
+        StartCoroutine(WaitForFilesAndInitialize());
+    }
+
+    IEnumerator WaitForFilesAndInitialize()
+    {
+        // Wait until files are ready
+        yield return new WaitUntil(() => apiRequest.filesAssigned);
+
+        // Now proceed with the original initialization
         if (coordinatesCsvFile == null || transcriptsCsvFile == null)
         {
             Debug.LogError("CSV files are not assigned.");
-            return;
+            yield break; // Ensure all code paths return a value
         }
 
         if (mapGenerator == null)
         {
             Debug.LogError("MapGenerator script reference not assigned.");
-            return;
+            yield break; // Ensure all code paths return a value
         }
 
         List<TopicInfo> topics = MergeDataFromCSVFiles(coordinatesCsvFile, transcriptsCsvFile);
@@ -50,10 +67,8 @@ public class CharacterSpawner : MonoBehaviour
         {
             SpawnCharacters(topics);
         }
-        else
-        {
-            Debug.LogWarning("No topics found to spawn characters.");
-        }
+
+        yield break; // Ensure all code paths return a value
     }
 
     private List<TopicInfo> MergeDataFromCSVFiles(TextAsset coordinatesCsv, TextAsset transcriptsCsv)
@@ -77,10 +92,7 @@ public class CharacterSpawner : MonoBehaviour
                     URL = transcriptInfo.URL
                 });
             }
-            else
-            {
-                Debug.LogWarning($"No transcript found for label: {trimmedLabel}");
-            }
+
         }
 
         return topics;
@@ -93,7 +105,6 @@ public class CharacterSpawner : MonoBehaviour
         try
         {
             var lines = csvFile.text.Split('\n');
-            Debug.Log("Number of lines read from coordinates CSV: " + lines.Length);
 
             if (lines.Length < 2)
             {
@@ -111,7 +122,6 @@ public class CharacterSpawner : MonoBehaviour
                     {
                         string label = values[4].Trim().Trim('"');
                         coordinates.Add((label, normalizedTranscriptLength));
-                        Debug.Log($"Parsed coordinate: {label} with normalized transcript length: {normalizedTranscriptLength}");
                     }
                     else
                     {
@@ -139,7 +149,6 @@ public class CharacterSpawner : MonoBehaviour
         try
         {
             var lines = csvFile.text.Split('\n');
-            Debug.Log("Number of lines read from transcripts CSV: " + lines.Length);
 
             foreach (var line in lines.Skip(1))
             {
@@ -151,7 +160,6 @@ public class CharacterSpawner : MonoBehaviour
                     string transcript = values[3].Trim().Trim('"');
                     string url = values[2].Trim().Trim('"');
                     transcripts[label] = (transcript, url);
-                    Debug.Log($"Parsed transcript for label: {label} - Transcript: {transcript}, URL: {url}");
                 }
                 else
                 {
@@ -201,7 +209,6 @@ public class CharacterSpawner : MonoBehaviour
                 var characterAI = character.GetComponent<CharacterAI>();
                 if (characterAI != null)
                 {
-                    Debug.Log($"Character {topic.Label} initialized with CharacterAI component.");
                     string characterTranscript = GetTranscriptSegment(topic.Transcript, numSegments, i % numSegments);
                     characterAI.Initialize($"{topic.Label} - Part {i + 1}", characterTranscript, topic.URL);  // Pass the URL
                     spawnedCharacters.Add(characterAI);
@@ -215,7 +222,7 @@ public class CharacterSpawner : MonoBehaviour
 
                 // Position the UI Canvas slightly in front of the character
                 Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0);
-                GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+                GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, houseRotation);
 
                 if (uiCanvas == null)
                 {
@@ -256,6 +263,19 @@ public class CharacterSpawner : MonoBehaviour
         return string.Join(" ", words.Skip(start).Take(end - start));
     }
 
+    private void AdjustRectTransform(RectTransform rectTransform, float height, float posYShift)
+    {
+        // Set the size delta for the height while keeping the current width
+        Vector2 sizeDelta = rectTransform.sizeDelta;
+        sizeDelta.y = height;
+        rectTransform.sizeDelta = sizeDelta;
+
+        // Adjust the anchored position to shift it up
+        Vector2 anchoredPosition = rectTransform.anchoredPosition;
+        anchoredPosition.y += posYShift;
+        rectTransform.anchoredPosition = anchoredPosition;
+    }
+
     private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas, int index)
     {
         if (characterAI == null || uiCanvas == null)
@@ -263,8 +283,8 @@ public class CharacterSpawner : MonoBehaviour
             Debug.LogError("CharacterAI or uiCanvas is null.");
             return;
         }
-
-        uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
+        RectTransform uiCanvasRect = uiCanvas.GetComponent<RectTransform>();
+        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f); // 50.0f is an example value for the Y-axis shift
 
         TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
 
@@ -280,7 +300,7 @@ public class CharacterSpawner : MonoBehaviour
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
             inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(300, 60); // Adjust size
+            inputFieldRect.sizeDelta = new Vector2(200, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
             inputField.textComponent.color = Color.white; // Set text color to black
@@ -330,6 +350,19 @@ public class CharacterSpawner : MonoBehaviour
         {
             Debug.LogWarning("No TMP_Text found in the UI Canvas.");
         }
+        StartCoroutine(UpdateCanvasRotation(uiCanvas.transform));
+    }
+    private IEnumerator UpdateCanvasRotation(Transform canvasTransform)
+    {
+        while (true)
+        {
+            if (mainCamera != null)
+            {
+                Vector3 directionToCamera = mainCamera.transform.position - canvasTransform.position;
+                canvasTransform.rotation = Quaternion.LookRotation(-directionToCamera);
+            }
+            yield return null;
+        }
     }
 
 
@@ -340,6 +373,8 @@ public class CharacterSpawner : MonoBehaviour
             Debug.LogError("SpawnCharacterAI or uiCanvas is null.");
             return;
         }
+        RectTransform uiCanvasRect = uiCanvas.GetComponent<RectTransform>();
+        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f); // 50.0f is an example value for the Y-axis shift
 
         uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
 
@@ -353,10 +388,11 @@ public class CharacterSpawner : MonoBehaviour
         if (inputField != null)
         {
             sCharacterAI.userInputField = inputField;
+            Debug.Log("Inputfield assigned");
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
             inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
-            inputFieldRect.sizeDelta = new Vector2(300, 60); // Adjust size
+            inputFieldRect.sizeDelta = new Vector2(200, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
             inputField.textComponent.color = Color.white; // Set text color to black
@@ -495,6 +531,7 @@ public class CharacterSpawner : MonoBehaviour
 
         float zOffset = houseDimensions.z + 1f;
         Vector3 adjustedPos = new Vector3(position.x, position.y, position.z + zOffset);
+        Debug.Log($"Spawn character spawned at: {adjustedPos}");
 
         GameObject character = Instantiate(spawnCharacterPrefab, adjustedPos, Quaternion.identity);
         var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
@@ -510,6 +547,7 @@ public class CharacterSpawner : MonoBehaviour
             {
                 Destroy(character.gameObject); // Destroy the GameObject associated with the character AI
                 secondCord = adjustedPos;
+                return;
             }
         }
         else
@@ -552,20 +590,23 @@ public class CharacterSpawner : MonoBehaviour
         }
 
         character.transform.position = endPosition;
-        Debug.Log("Character moved to: " + character.transform.position);
     }
 
     public void spawnSecondCharacter(List<string> clusterNames)
     {
-        Debug.Log("Spawning second chracter.");
+        Debug.Log("skdlfhasf");
         GameObject character = Instantiate(spawnCharacterPrefab, secondCord, Quaternion.identity);
+        Debug.Log("skdlfhasf");
         var sCharacterAI = character.GetComponent<SpawnCharacterAI>();
         sCharacterAI.InitializeSecondOne(clusterNames);
+        Debug.Log("skdlfhasf");
 
         startSpawnedCharacters.Add(sCharacterAI);
 
         Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0); // Move 0.5 units in front and 2 units above the character
+
         GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, Quaternion.identity);
+        Debug.Log("skdlfhasf");
 
         Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
         canvasComponent.renderMode = RenderMode.WorldSpace;
@@ -581,6 +622,7 @@ public class CharacterSpawner : MonoBehaviour
         // Set the canvas sorting order (Remove the duplicate declaration)
         canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
 
+        Debug.Log("skdlfhasf");
         AssignUIElementsStart(sCharacterAI, uiCanvas);
     }
 }
