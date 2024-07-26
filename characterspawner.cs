@@ -1,21 +1,30 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 using TMPro;
-using System.Collections;
 using UnityEngine.UI;
+using ReadyPlayerMe;
+using GLTFast;
+using GLTFast.Loading;
+using GLTFast.Logging;
+using GLTFast.Materials;
+
+
 
 public class CharacterSpawner : MonoBehaviour
 {
     private ApiRequest apiRequest;
-    [SerializeField] private GameObject characterPrefab;
+    private CharacterDesigner characterDesigner;
     [SerializeField] private GameObject spawnCharacterPrefab; // Assign the spawnCharacterAI here
     [SerializeField] private GameObject uiCanvasPrefab;
     [SerializeField] public TextAsset coordinatesCsvFile;
     [SerializeField] public TextAsset transcriptsCsvFile;
     [SerializeField] private MapGenerator mapGenerator; // Reference to MapGenerator script
-    [SerializeField] private Camera mainCamera; 
+    [SerializeField] private Camera mainCamera;
 
     private class TopicInfo
     {
@@ -31,45 +40,64 @@ public class CharacterSpawner : MonoBehaviour
 
     public Dictionary<string, bool> MasteredTopics => masteredTopics;
     public Vector3 secondCord;
-    void Start()
+    public bool charactersInstantiated = false;
+
+    private async void Start()
     {
         apiRequest = FindObjectOfType<ApiRequest>();
+        characterDesigner = GetComponent<CharacterDesigner>();
         if (apiRequest == null)
         {
             Debug.LogError("ApiRequest component not found in the scene.");
             return;
         }
 
-        StartCoroutine(WaitForFilesAndInitialize());
+        if (characterDesigner == null)
+        {
+            Debug.LogError("CharacterDesigner component not found in the scene.");
+            return;
+        }
+
+        await WaitForFilesAndInitialize();
     }
 
-    IEnumerator WaitForFilesAndInitialize()
-    {
-        // Wait until files are ready
-        yield return new WaitUntil(() => apiRequest.filesAssigned);
 
-        // Now proceed with the original initialization
+    private async Task WaitForFilesAndInitialize()
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        StartCoroutine(WaitForFilesCoroutine(tcs));
+
+        await tcs.Task;
+
         if (coordinatesCsvFile == null || transcriptsCsvFile == null)
         {
             Debug.LogError("CSV files are not assigned.");
-            yield break; // Ensure all code paths return a value
+            return;
         }
+
+        mapGenerator = FindObjectOfType<MapGenerator>();
 
         if (mapGenerator == null)
         {
             Debug.LogError("MapGenerator script reference not assigned.");
-            yield break; // Ensure all code paths return a value
+            return;
         }
 
         List<TopicInfo> topics = MergeDataFromCSVFiles(coordinatesCsvFile, transcriptsCsvFile);
         Debug.Log("Number of topics combined from CSVs: " + topics.Count);
         if (topics.Count > 0)
         {
-            SpawnCharacters(topics);
+            await SpawnCharacters(topics);
         }
-
-        yield break; // Ensure all code paths return a value
     }
+
+    private IEnumerator WaitForFilesCoroutine(TaskCompletionSource<bool> tcs)
+    {
+        yield return new WaitUntil(() => apiRequest.filesAssigned);
+        tcs.SetResult(true);
+    }
+
+
 
     private List<TopicInfo> MergeDataFromCSVFiles(TextAsset coordinatesCsv, TextAsset transcriptsCsv)
     {
@@ -175,7 +203,7 @@ public class CharacterSpawner : MonoBehaviour
         return transcripts;
     }
 
-    private void SpawnCharacters(List<TopicInfo> topics)
+    private async Task SpawnCharacters(List<TopicInfo> topics)
     {
         foreach (var topic in topics)
         {
@@ -192,6 +220,8 @@ public class CharacterSpawner : MonoBehaviour
             }
 
             int numSegments = Mathf.Max(1, Mathf.FloorToInt(topic.NormalizedTranscriptLength));
+            string characterModelUrl = await characterDesigner.MakeCharacterFromTranscriptAsync(topic.Transcript);
+
 
             for (int i = 0; i < housePositions.Count; i++)
             {
@@ -201,53 +231,92 @@ public class CharacterSpawner : MonoBehaviour
                 // Add 1f to the y-coordinate of the character's position
                 Vector3 characterPosition = new Vector3(housePosition.x, housePosition.y + 0.5f, housePosition.z);
 
-                GameObject character = Instantiate(characterPrefab, characterPosition, houseRotation);
+                // Pass an empty string as the initial model URL if you don't have a default model
+                await InstantiateCharacter("", characterPosition, houseRotation, topic.Label, topic.Transcript, topic.URL, characterModelUrl);
 
-                // Start the coroutine to move the character
-                StartCoroutine(MoveCharacter(character, 5f));
-
-                var characterAI = character.GetComponent<CharacterAI>();
-                if (characterAI != null)
-                {
-                    string characterTranscript = GetTranscriptSegment(topic.Transcript, numSegments, i % numSegments);
-                    characterAI.Initialize($"{topic.Label} - Part {i + 1}", characterTranscript, topic.URL);  // Pass the URL
-                    spawnedCharacters.Add(characterAI);
-                }
-                else
-                {
-                    Debug.LogError($"Character {topic.Label} does not have a CharacterAI component attached.");
-                }
-
-                character.name = $"{topic.Label} - Part {i + 1}";
-
-                // Position the UI Canvas slightly in front of the character
-                Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0);
-                GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, houseRotation);
-
-                if (uiCanvas == null)
-                {
-                    Debug.LogError("Failed to instantiate uiCanvasPrefab.");
-                }
-
-                Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
-                canvasComponent.renderMode = RenderMode.WorldSpace;
-
-                // Set the canvas as a child of the character to follow its movements
-                uiCanvas.transform.SetParent(character.transform);
-
-                // Apply a 180-degree rotation to the canvas around the Y-axis
-                uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
-
-                uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
-
-                // Set the canvas sorting order
-                canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
-
-                AssignUIElements(characterAI, uiCanvas, i);
+                await Task.Delay(1000); // Wait for 1 second between spawns
             }
         }
     }
 
+    private async Task WaitOneSecond()
+    {
+        await Task.Delay(1000);
+    }
+    private async Task InstantiateCharacter(string initialModelUrl, Vector3 position, Quaternion rotation, string label, string transcript, string url, string characterURL)
+    {
+        UnityWebRequest request = UnityWebRequest.Get(characterURL);
+        var operation = request.SendWebRequest();
+
+        var tcs = new TaskCompletionSource<bool>();
+        operation.completed += _ => tcs.SetResult(true);
+        await tcs.Task;
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            byte[] modelData = request.downloadHandler.data;
+            Debug.Log("Model data size: " + modelData.Length);
+
+            // Verify the model data is not empty
+            if (modelData == null || modelData.Length == 0)
+            {
+                Debug.LogError("Model data is empty or null.");
+                return;
+            }
+
+            // Using GLTFast for importing GLTF models
+            var gltfImport = new GltfImport();
+
+            // Load the GLTF model
+            Debug.Log("Starting GLTFast model load...");
+            bool success = await gltfImport.LoadGltfBinary(modelData);
+
+            if (success)
+            {
+                GameObject character = new GameObject("Character");
+                bool instantiateSuccess = await gltfImport.InstantiateMainSceneAsync(character.transform);
+
+                if (instantiateSuccess)
+                {
+                    character.transform.position = position;
+                    Debug.Log($"{position}: character");
+                    character.transform.rotation = rotation;
+
+                    // Start the coroutine to move the character
+                    StartCoroutine(MoveCharacter(character, 5f));
+
+                    // Add CharacterAI component dynamically
+                    var characterAI = character.AddComponent<CharacterAI>();
+                    characterAI.Initialize(label, transcript, url);
+                    spawnedCharacters.Add(characterAI);
+
+                    // Instantiate and assign the UI Canvas
+                    Vector3 uiPosition = character.transform.position + character.transform.forward * 0.5f + new Vector3(0, 2, 0);
+                    GameObject uiCanvas = Instantiate(uiCanvasPrefab, uiPosition, rotation);
+                    Canvas canvasComponent = uiCanvas.GetComponent<Canvas>();
+                    canvasComponent.renderMode = RenderMode.WorldSpace;
+                    uiCanvas.transform.SetParent(character.transform);
+                    uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
+                    uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+                    canvasComponent.sortingOrder = 100;
+                    AssignUIElements(characterAI, uiCanvas, spawnedCharacters.Count - 1);
+                }
+                else
+                {
+                    Debug.LogError("Failed to instantiate GLTF model.");
+                    Destroy(character);
+                }
+            }
+            else
+            {
+                Debug.LogError("Failed to load GLTF model.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Failed to download model: " + request.error);
+        }
+    }
     private string GetTranscriptSegment(string transcript, int totalSegments, int segmentIndex)
     {
         if (totalSegments <= 1)
@@ -263,19 +332,6 @@ public class CharacterSpawner : MonoBehaviour
         return string.Join(" ", words.Skip(start).Take(end - start));
     }
 
-    private void AdjustRectTransform(RectTransform rectTransform, float height, float posYShift)
-    {
-        // Set the size delta for the height while keeping the current width
-        Vector2 sizeDelta = rectTransform.sizeDelta;
-        sizeDelta.y = height;
-        rectTransform.sizeDelta = sizeDelta;
-
-        // Adjust the anchored position to shift it up
-        Vector2 anchoredPosition = rectTransform.anchoredPosition;
-        anchoredPosition.y += posYShift;
-        rectTransform.anchoredPosition = anchoredPosition;
-    }
-
     private void AssignUIElements(CharacterAI characterAI, GameObject uiCanvas, int index)
     {
         if (characterAI == null || uiCanvas == null)
@@ -284,8 +340,8 @@ public class CharacterSpawner : MonoBehaviour
             return;
         }
         RectTransform uiCanvasRect = uiCanvas.GetComponent<RectTransform>();
-        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f); // 50.0f is an example value for the Y-axis shift
 
+        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f);
         TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
 
         TMP_Text responseText = uiCanvas.GetComponentsInChildren<TMP_Text>()
@@ -299,7 +355,7 @@ public class CharacterSpawner : MonoBehaviour
 
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
+            inputFieldRect.anchoredPosition = new Vector2(0, -150); // Adjust position
             inputFieldRect.sizeDelta = new Vector2(200, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
@@ -317,8 +373,8 @@ public class CharacterSpawner : MonoBehaviour
         {
             characterAI.responseText = responseText;
             characterAI.labelIndex = index;
-            responseText.fontSize = 24.0f;
-            responseText.color = Color.black;
+            responseText.fontSize = 20.0f;
+            responseText.color = Color.white;
             responseText.enableAutoSizing = false;
             responseText.alignment = TextAlignmentOptions.TopLeft;
             responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
@@ -365,7 +421,18 @@ public class CharacterSpawner : MonoBehaviour
         }
     }
 
+    private void AdjustRectTransform(RectTransform rectTransform, float height, float posYShift)
 
+    {
+        // Set the size delta for the height while keeping the current width
+        Vector2 sizeDelta = rectTransform.sizeDelta;
+        sizeDelta.y = height;
+        rectTransform.sizeDelta = sizeDelta;
+        // Adjust the anchored position to shift it up
+        Vector2 anchoredPosition = rectTransform.anchoredPosition;
+        anchoredPosition.y += posYShift;
+        rectTransform.anchoredPosition = anchoredPosition;
+    }
     private void AssignUIElementsStart(SpawnCharacterAI sCharacterAI, GameObject uiCanvas)
     {
         if (sCharacterAI == null || uiCanvas == null)
@@ -374,8 +441,8 @@ public class CharacterSpawner : MonoBehaviour
             return;
         }
         RectTransform uiCanvasRect = uiCanvas.GetComponent<RectTransform>();
-        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f); // 50.0f is an example value for the Y-axis shift
 
+        AdjustRectTransform(uiCanvasRect, 307.16f, 1.5f);
         uiCanvas.transform.rotation = Quaternion.Euler(0, 180, 0);
 
         TMP_InputField inputField = uiCanvas.GetComponentInChildren<TMP_InputField>();
@@ -391,7 +458,7 @@ public class CharacterSpawner : MonoBehaviour
             Debug.Log("Inputfield assigned");
             // Manually set the position and size of the input field
             RectTransform inputFieldRect = inputField.GetComponent<RectTransform>();
-            inputFieldRect.anchoredPosition = new Vector2(0, -90); // Adjust position
+            inputFieldRect.anchoredPosition = new Vector2(0, -120); // Adjust position
             inputFieldRect.sizeDelta = new Vector2(200, 60); // Adjust size
             inputField.textComponent.alignment = TextAlignmentOptions.TopLeft; // Align text to the top left
             inputField.textComponent.fontSize = 20; // Set font size
@@ -408,8 +475,8 @@ public class CharacterSpawner : MonoBehaviour
         if (responseText != null)
         {
             sCharacterAI.responseText = responseText;
-            responseText.fontSize = 24.0f;
-            responseText.color = Color.black;
+            responseText.fontSize = 20.0f;
+            responseText.color = Color.white;
             responseText.enableAutoSizing = false;
             responseText.alignment = TextAlignmentOptions.TopLeft;
             responseText.fontStyle = FontStyles.Bold | FontStyles.Italic;
@@ -567,7 +634,7 @@ public class CharacterSpawner : MonoBehaviour
         // Apply a 180-degree rotation to the canvas around the Y-axis
         uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-        uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
 
         // Set the canvas sorting order (Remove the duplicate declaration)
         canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
@@ -617,7 +684,7 @@ public class CharacterSpawner : MonoBehaviour
         // Apply a 180-degree rotation to the canvas around the Y-axis
         uiCanvas.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-        uiCanvas.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
+        uiCanvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
 
         // Set the canvas sorting order (Remove the duplicate declaration)
         canvasComponent.sortingOrder = 100; // Higher value to ensure it renders on top
