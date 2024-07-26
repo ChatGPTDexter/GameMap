@@ -6,17 +6,22 @@ using System.Threading.Tasks;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Linq;
+using System;
 
 public class CharacterDesigner : MonoBehaviour
 {
     private const string readyPlayerMeApiUrl = "https://models.readyplayer.me";
     private ApiRequest apiRequest;
 
-    [SerializeField] private string partnerSubdomain = "mentix"; // Your subdomain
-    [SerializeField] private string OpenAIAPIKey = "apikey"; // Your OpenAI API key
-    [SerializeField] private string readyPlayerMeApiKey = "sk_live_snjW5fo5YwoT564MqwxIuuQZlapHCzbBd7hw"; // Your Ready Player Me API key
+    private string partnerSubdomain = "mentix"; // Your subdomain
+    private string OpenAIAPIKey = "api-key"; // Your OpenAI API key
+    private string readyPlayerMeApiKey = "sk_live_snjW5fo5YwoT564MqwxIuuQZlapHCzbBd7hw"; // Your Ready Player Me API key
+    private string applicationId = "669e15168c3ebffbad05ba66";
     private const string OpenAIEndpoint = "https://api.openai.com/v1/chat/completions";
-    [SerializeField] private string applicationId = "your-application-id-here";
+    private string userID;
+    private string accessToken = null;
+
 
     void Start()
     {
@@ -27,7 +32,7 @@ public class CharacterDesigner : MonoBehaviour
         }
     }
 
-    public async Task<string> DesignCharacterFromTranscriptAsync(string transcript)
+    public async Task<string> MakeCharacterFromTranscriptAsync(string transcript)
     {
         var tcs = new TaskCompletionSource<string>();
 
@@ -44,7 +49,6 @@ public class CharacterDesigner : MonoBehaviour
         yield return new WaitUntil(() => apiRequest.filesAssigned);
 
         // Step 1: Create an anonymous user and get the access token
-        string accessToken = null;
         yield return StartCoroutine(CreateAnonymousUser(result => accessToken = result));
         if (string.IsNullOrEmpty(accessToken))
         {
@@ -54,19 +58,10 @@ public class CharacterDesigner : MonoBehaviour
 
         // Step 2: Fetch all possible templates
         string templateId = null;
-        JArray outfits = null;
         yield return StartCoroutine(FetchAllTemplates(transcript, accessToken, result => templateId = result));
         if (string.IsNullOrEmpty(templateId))
         {
             Debug.LogError("Failed to get template ID.");
-            yield break;
-        }
-
-        // New Step: Fetch all outfits
-        yield return StartCoroutine(FetchAllOutfits(accessToken, userId, applicationId, result => outfits = result));
-        if (outfits == null)
-        {
-            Debug.LogError("Failed to fetch outfits.");
             yield break;
         }
 
@@ -79,14 +74,6 @@ public class CharacterDesigner : MonoBehaviour
             yield break;
         }
 
-        // New Step: Apply the chosen outfit to the avatar
-        string chosenOutfitId = null;
-        yield return StartCoroutine(AskForBestOutfit(outfits, transcript, result => chosenOutfitId = result));
-        if (!string.IsNullOrEmpty(chosenOutfitId))
-        {
-            yield return StartCoroutine(ApplyOutfitToAvatar(accessToken, avatarId, chosenOutfitId));
-        }
-
         // Step 4: Fetch and save the draft avatar
         yield return StartCoroutine(FetchAndSaveDraftAvatar(accessToken, avatarId, result => avatarId = result));
         if (string.IsNullOrEmpty(avatarId))
@@ -95,9 +82,34 @@ public class CharacterDesigner : MonoBehaviour
             yield break;
         }
 
-        // Step 5: Fetch the avatar in GLB format
+        JArray outfits = null;
+        //Step 5: killing myslef
+        yield return StartCoroutine(FetchAllOutfits(accessToken, result => outfits = result));
+        if (outfits == null)
+        {
+            Debug.LogError("Failed to fetch outfits.");
+            yield break;
+        }
+
+        string outfitID = null;
+        yield return StartCoroutine(AskForBestOutfit(outfits, transcript, result => outfitID = result));
+        if (outfitID == null)
+        {
+            Debug.LogError("Failed to fetch outfits.");
+            yield break;
+        }
+
+        string processedID = null;
+        yield return StartCoroutine(EquipOutfitToAvatar(accessToken, avatarId, outfitID, result => processedID = result));
+        if (processedID == null)
+        {
+            Debug.LogError("Failed to combine outfit and avatar");
+            yield break;
+        }
+    
+
         string avatarUrl = null;
-        yield return StartCoroutine(FetchAvatarGLB(accessToken, avatarId, result => avatarUrl = result));
+        yield return StartCoroutine(FetchAvatarGLB(accessToken, processedID, result => avatarUrl = result));
         if (string.IsNullOrEmpty(avatarUrl))
         {
             Debug.LogError("Failed to fetch avatar GLB.");
@@ -106,6 +118,7 @@ public class CharacterDesigner : MonoBehaviour
 
         onCharacterDesigned?.Invoke(avatarUrl);
     }
+
     private IEnumerator CreateAnonymousUser(System.Action<string> onComplete)
     {
         using (UnityWebRequest request = UnityWebRequest.PostWwwForm($"https://{partnerSubdomain}.readyplayer.me/api/users", ""))
@@ -123,6 +136,7 @@ public class CharacterDesigner : MonoBehaviour
                 Debug.Log("CreateAnonymousUser response: " + responseJson); // Log the response for debugging
                 JObject response = JObject.Parse(responseJson);
                 string token = response["data"]["token"].ToString();
+                userID = response["data"]["id"].ToString(); // Assign userID here
                 onComplete?.Invoke(token);
             }
         }
@@ -168,134 +182,7 @@ public class CharacterDesigner : MonoBehaviour
             }
         }
     }
-    private IEnumerator FetchAllOutfits(string token, string userId, string applicationId, System.Action<JArray> onComplete)
-    {
-        string outfitsEndpoint = $"https://api.readyplayer.me/v1/assets?filter=usable-by-user-and-app&filterApplicationId={applicationId}&filterUserId={userId}";
 
-        using (UnityWebRequest request = UnityWebRequest.Get(outfitsEndpoint))
-        {
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-            request.SetRequestHeader("X-APP-ID", applicationId);
-
-            yield return request.SendWebRequest();
-
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"Failed to fetch outfits: {request.error}");
-                Debug.LogError($"Response: {request.downloadHandler.text}");
-                onComplete?.Invoke(null);
-            }
-            else
-            {
-                string responseJson = request.downloadHandler.text;
-                Debug.Log($"FetchAllOutfits response: {responseJson}");
-                
-                try
-                {
-                    JObject response = JObject.Parse(responseJson);
-                    JArray assetsArray = (JArray)response["data"];
-                    if (assetsArray != null)
-                    {
-                        // Filter for outfits only
-                        JArray outfitsArray = new JArray(assetsArray.Where(a => (string)a["type"] == "outfit"));
-                        onComplete?.Invoke(outfitsArray);
-                    }
-                    else
-                    {
-                        Debug.LogError("No assets data found in the response.");
-                        onComplete?.Invoke(null);
-                    }
-                }
-                catch (JsonException e)
-                {
-                    Debug.LogError($"Error parsing JSON response: {e.Message}");
-                    onComplete?.Invoke(null);
-                }
-            }
-        }
-    }
-    private IEnumerator AskForBestOutfit(JArray outfits, string transcript, System.Action<string> onComplete)
-    {
-        var requestData = new OpenAIRequest
-        {
-            model = "gpt-4-mini",
-            messages = new OpenAIMessage[]
-            {
-                new OpenAIMessage
-                {
-                    role = "system",
-                    content = "Given a transcript and a list of outfits, choose the best outfit ID for the character saying the transcript in a videogame."
-                },
-                new OpenAIMessage
-                {
-                    role = "user",
-                    content = $"Transcript: {transcript}\nOutfits: {outfits.ToString()}"
-                }
-            },
-            max_tokens = 50,
-            temperature = 0.0f
-        };
-
-        string jsonData = JsonUtility.ToJson(requestData);
-
-        using (UnityWebRequest request = new UnityWebRequest(OpenAIEndpoint, "POST"))
-        {
-            byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.SetRequestHeader("Authorization", $"Bearer {OpenAIAPIKey}");
-
-            yield return request.SendWebRequest();
-
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"Error: {request.error}\nResponse: {request.downloadHandler.text}");
-                onComplete?.Invoke(null);
-            }
-            else
-            {
-                var jsonResponse = JsonUtility.FromJson<OpenAIResponse>(request.downloadHandler.text);
-                if (jsonResponse.choices != null && jsonResponse.choices.Count > 0)
-                {
-                    var chosenOutfitId = jsonResponse.choices[0].message.content;
-                    onComplete?.Invoke(chosenOutfitId);
-                }
-                else
-                {
-                    Debug.LogError("No valid response from AI for the chosen outfit.");
-                    onComplete?.Invoke(null);
-                }
-            }
-        }
-    }
-
-    private IEnumerator ApplyOutfitToAvatar(string token, string avatarId, string outfitId)
-    {
-        JObject dataObject = new JObject
-        {
-            { "outfit", outfitId }
-        };
-
-        string url = $"https://api.readyplayer.me/v2/avatars/{avatarId}";
-        using (UnityWebRequest request = UnityWebRequest.Put(url, dataObject.ToString()))
-        {
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-
-            yield return request.SendWebRequest();
-
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError("Failed to apply outfit to avatar: " + request.error);
-                Debug.LogError("ApplyOutfitToAvatar response: " + request.downloadHandler.text);
-            }
-            else
-            {
-                Debug.Log("Successfully applied outfit to avatar.");
-            }
-        }
-    }
     private IEnumerator CreateDraftAvatarFromTemplate(string token, string templateId, System.Action<string> onComplete)
     {
         // Create a JSON object for the data property
@@ -380,29 +267,6 @@ public class CharacterDesigner : MonoBehaviour
         }
     }
 
-    private IEnumerator FetchAvatarGLB(string token, string avatarId, System.Action<string> onComplete)
-    {
-        using (UnityWebRequest request = UnityWebRequest.Get($"https://models.readyplayer.me/{avatarId}.glb"))
-        {
-            request.SetRequestHeader("Authorization", $"Bearer {token}");
-            request.SetRequestHeader("x-api-key", readyPlayerMeApiKey);  // Use the x-api-key header
-
-
-            yield return request.SendWebRequest();
-
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError("Failed to fetch avatar GLB: " + request.error);
-                Debug.LogError("FetchAvatarGLB response: " + request.downloadHandler.text); // Log the response for debugging
-                onComplete?.Invoke(null);
-            }
-            else
-            {
-                onComplete?.Invoke(request.url); // The URL to the fetched GLB file
-            }
-        }
-    }
-
     public IEnumerator AskForBestCharacter(object charObject, string transcript, System.Action<string> onComplete)
     {
         var followUpRequestData = new OpenAIRequest
@@ -413,7 +277,7 @@ public class CharacterDesigner : MonoBehaviour
                 new OpenAIMessage
                 {
                     role = "system",
-                    content = "Given a transcript, say EXACTLY the id of the character that would be best to say that given transcript in a videogame."
+                    content = "Given a transcript, say EXACTLY AND ONLY the id of the character that would be best to say that given transcript in a videogame."
                 },
                 new OpenAIMessage
                 {
@@ -460,4 +324,263 @@ public class CharacterDesigner : MonoBehaviour
             }
         }
     }
+
+    private IEnumerator FetchAllOutfits(string token, System.Action<JArray> onComplete)
+    {
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(applicationId) || string.IsNullOrEmpty(userID))
+        {
+            Debug.LogError("Invalid parameters for fetching outfits. Please check token, applicationId, and userID.");
+            onComplete?.Invoke(null);
+            yield break;
+        }
+        Debug.Log($"{userID}");
+        string outfitsEndpoint = $"https://api.readyplayer.me/v1/assets?filter=usable-by-user-and-app&filterApplicationId={applicationId}&filterUserId={userID}&limit=100&type=outfit";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(outfitsEndpoint))
+        {
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("X-APP-ID", applicationId);
+            request.SetRequestHeader("x-api-key", readyPlayerMeApiKey);  // Use the x-api-key header
+
+            Debug.Log($"Request URL: {request.url}");
+            Debug.Log($"Authorization Header: Bearer {token.Substring(0, 10)}..."); // Only log first 10 characters of token
+            Debug.Log($"X-API-KEY Header: {readyPlayerMeApiKey}");
+
+            yield return request.SendWebRequest();
+
+            Debug.Log($"Response Code: {request.responseCode}");
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Failed to fetch outfits: {request.error}");
+                Debug.LogError($"Response Code: {request.responseCode}");
+                Debug.LogError($"Full Response: {request.downloadHandler.text}");
+
+                onComplete?.Invoke(null);
+            }
+            else
+            {
+                string responseJson = request.downloadHandler.text;
+                Debug.Log($"FetchAllOutfits response: {responseJson}");
+                try
+                {
+                    JObject response = JObject.Parse(responseJson);
+                    JArray outfitsArray = (JArray)response["data"];
+                    if (outfitsArray != null && outfitsArray.Count > 0)
+                    {
+                        onComplete?.Invoke(outfitsArray);
+                    }
+                    else
+                    {
+                        Debug.LogWarning("No outfits found in the response.");
+                        onComplete?.Invoke(new JArray());
+                    }
+                }
+                catch (JsonException e)
+                {
+                    Debug.LogError($"Error parsing JSON response: {e.Message}");
+                    onComplete?.Invoke(null);
+                }
+            }
+        }
+    }
+
+    public IEnumerator AskForBestOutfit(JArray outfitObject, string transcript, System.Action<string> onComplete)
+    {
+        var followUpRequestData = new OpenAIRequest
+        {
+            model = "gpt-4o-mini",
+            messages = new OpenAIMessage[]
+            {
+                new OpenAIMessage
+                {
+                    role = "system",
+                    content = "Given a transcript, say EXACTLY AND ONLY the name of the of the costume for a character that would be most appropriate saying the transcript in an interactive video game."
+                },
+                new OpenAIMessage
+                {
+                    role = "user",
+                    content = $"Transcript: {transcript}\n array of costumes: {outfitObject}"
+                }
+            },
+            max_tokens = 50,
+            temperature = 0.0f
+        };
+
+        string followUpJsonData = JsonUtility.ToJson(followUpRequestData);
+
+        using (UnityWebRequest followUpRequest = new UnityWebRequest(OpenAIEndpoint, "POST"))
+        {
+            byte[] followUpBodyRaw = Encoding.UTF8.GetBytes(followUpJsonData);
+            followUpRequest.uploadHandler = new UploadHandlerRaw(followUpBodyRaw);
+            followUpRequest.downloadHandler = new DownloadHandlerBuffer();
+            followUpRequest.SetRequestHeader("Content-Type", "application/json");
+            followUpRequest.SetRequestHeader("Authorization", $"Bearer {OpenAIAPIKey}");
+
+            yield return followUpRequest.SendWebRequest();
+
+            if (followUpRequest.result == UnityWebRequest.Result.ConnectionError || followUpRequest.result == UnityWebRequest.Result.ProtocolError)
+            {
+                Debug.LogError($"Error: {followUpRequest.error}\nResponse: {followUpRequest.downloadHandler.text}");
+                onComplete?.Invoke(null);
+            }
+            else
+            {
+                Debug.Log($"Follow-up Response: {followUpRequest.downloadHandler.text}");
+                var followUpJsonResponse = JsonUtility.FromJson<OpenAIResponse>(followUpRequest.downloadHandler.text);
+                if (followUpJsonResponse.choices != null && followUpJsonResponse.choices.Count > 0)
+                {
+                    var followUpChoice = followUpJsonResponse.choices[0];
+                    var chosenName = followUpChoice.message.content;
+                    string chosenID = GetOutfitIdByName(outfitObject, chosenName);
+                    Debug.Log(chosenID);
+                    Debug.Log(chosenName);
+                    onComplete?.Invoke(chosenID);
+                }
+                else
+                {
+                    Debug.LogError("No valid response from AI for the chosen cluster.");
+                    onComplete?.Invoke(null);
+                }
+            }
+        }
+    }
+
+    private IEnumerator EquipOutfitToAvatar(string token, string avatarId, string outfitId, System.Action<string> onComplete)
+    {
+        string url = $"https://api.readyplayer.me/v2/avatars/{avatarId}";
+        JObject dataObject = new JObject
+        {
+            ["data"] = new JObject
+            {
+                ["assets"] = new JObject
+                {
+                    ["outfit"] = outfitId
+                }
+            }
+        };
+
+        using (UnityWebRequest request = new UnityWebRequest(url, "PATCH"))
+        {
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(dataObject.ToString());
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("x-api-key", readyPlayerMeApiKey);
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Failed to equip outfit: {request.error}");
+                Debug.LogError($"Response: {request.downloadHandler.text}");
+                onComplete?.Invoke(null);
+            }
+            else
+            {
+                string responseJson = request.downloadHandler.text;
+                Debug.Log($"Successfully equipped outfit. Response: {responseJson}");
+
+                // Parse the response to get the updated avatar ID or details
+                JObject response = JObject.Parse(responseJson);
+                string updatedAvatarId = response["data"]["id"].ToString(); // Extract updated avatar ID or other details if needed
+
+                // Step 3: Prepare the updated avatar data for saving
+                JObject updatedAvatarData = new JObject
+                {
+                    ["data"] = new JObject
+                    {
+                        ["assets"] = new JObject
+                        {
+                            ["outfit"] = outfitId
+                            // Include other updated properties if necessary
+                        }
+                    }
+                };
+
+                yield return StartCoroutine(SaveAvatar(token, updatedAvatarId, updatedAvatarData, (success) =>
+                {
+                    if (success)
+                    {
+                        // Step 5: Invoke the callback with the updated avatar ID
+                        onComplete?.Invoke(updatedAvatarId);
+                    }
+                    else
+                    {
+                        Debug.LogError("Failed to save the avatar.");
+                        onComplete?.Invoke(null);
+                    }
+                }));
+            }
+        }
+    }
+
+    private IEnumerator FetchAvatarGLB(string token, string avatarId, System.Action<string> onComplete)
+    {
+        using (UnityWebRequest request = UnityWebRequest.Get($"https://models.readyplayer.me/{avatarId}.glb"))
+        {
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("x-api-key", readyPlayerMeApiKey);  // Use the x-api-key header
+
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError("Failed to fetch avatar GLB: " + request.error);
+                Debug.LogError("FetchAvatarGLB response: " + request.downloadHandler.text); // Log the response for debugging
+                onComplete?.Invoke(null);
+            }
+            else
+            {
+                onComplete?.Invoke(request.url); // The URL to the fetched GLB file
+            }
+        }
+    }
+
+    private string GetOutfitIdByName(JArray outfits, string outfitName)
+    {
+        foreach (JObject outfit in outfits)
+        {
+            string name = outfit["name"]?.ToString();
+            string id = outfit["id"]?.ToString();
+
+            if (name != null && name.Equals(outfitName, StringComparison.OrdinalIgnoreCase))
+            {
+                return id;
+            }
+        }
+        return null; // Return null if the outfit was not found
+    }
+
+    private IEnumerator SaveAvatar(string token, string avatarId, JObject updatedAvatarData, System.Action<bool> onComplete)
+    {
+        string url = $"https://api.readyplayer.me/v2/avatars/{avatarId}";
+
+        using (UnityWebRequest request = new UnityWebRequest(url, "PUT"))
+        {
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(updatedAvatarData.ToString());
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Failed to save avatar: {request.error}");
+                Debug.LogError($"Response: {request.downloadHandler.text}");
+                onComplete?.Invoke(false);
+            }
+            else
+            {
+                Debug.Log("Successfully saved avatar.");
+                onComplete?.Invoke(true);
+            }
+        }
+    }
+
+
 }
